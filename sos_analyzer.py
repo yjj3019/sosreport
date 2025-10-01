@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-sosreport 압축 파일 AI 분석 및 보고서 생성 모듈 (v5.1 - 안정성 및 진단 강화)
+sosreport 압축 파일 AI 분석 및 보고서 생성 모듈 (v5.2 - API 통신 안정성 강화)
 - [신규] 외부 YAML 규칙 파일을 이용하는 지식 기반(Knowledge Base) 분석 기능 추가
 - [신규] 패키지 CVE 및 주요 설정 파일을 점검하는 자동화된 보안 감사 모듈 추가
 - [개선] 신규 분석 모듈(knowledge_base, security_analyzer)을 통합하여 분석 리포트 강화
 - [개선] AIBox 서버 연결 실패 및 404 Not Found 오류에 대한 안정성 및 진단 메시지 강화
 - [개선] 규칙/보안 분석 결과를 AI 프롬프트에 포함하여 종합 분석 품질 향상
+- [수정] AIBox 서버의 공식 분석 API(/api/sos/analyze_system)를 호출하도록 수정
+- [수정] 서버의 API 명세에 맞춰 분석 데이터를 직접 전송하는 방식으로 페이로드 변경
 - Git 버전(yjj3019)의 상세 데이터 파싱, 성능/로그 분석, 상관관계 분석 기능 완전 이식
 - AI 분석은 AIBox 서버의 API를 통해 수행하는 클라이언트-서버 구조 유지
 - 공식 sosreport 소스를 참고하여 파싱 안정성 및 범위 확장
@@ -73,7 +75,8 @@ class AIBoxAPIClient:
             self.server_url = server_url.strip('/')
 
         self.health_endpoint = f"{self.server_url}/api/health"
-        self.api_endpoint = f"{self.server_url}/api/v1/chat/completions"
+        # [수정] 서버의 공식 분석 엔드포인트로 변경
+        self.api_endpoint = f"{self.server_url}/api/sos/analyze_system"
         print(f"[*] AIBox API 클라이언트 초기화 (서버 URL: {self.server_url})")
 
         self.is_server_healthy = self._check_server_health()
@@ -104,74 +107,30 @@ class AIBoxAPIClient:
                 "error": "Server connection failed"
             }
 
-        print("[*] AI 기반 종합 분석 요청...")
-        prompt = self._generate_prompt(sos_data)
+        print(f"[*] AI 기반 종합 분석 요청... (API: {self.api_endpoint})")
         headers = {"Content-Type": "application/json"}
-        payload = {
-            "messages": [{"role": "user", "content": prompt}],
-            "mode": "instruct", 'stream': False
-        }
+        # [수정] 서버 API 명세에 따라 파싱된 sos_data 전체를 payload로 사용
+        payload = sos_data
+        
         try:
             response = requests.post(self.api_endpoint, headers=headers, json=payload, timeout=300)
 
             if response.status_code == 404:
                 print(Color.error(f"  - AI 서버 통신 오류: 404 Not Found"))
                 print(Color.error(f"  - 요청 URL: {self.api_endpoint}"))
-                print(Color.error(f"  - AIBox 서버에 '/api/v1/chat/completions' 엔드포인트가 존재하는지, 서버 URL이 정확한지 확인하십시오."))
+                print(Color.error(f"  - AIBox 서버에 '{self.api_endpoint}' 엔드포인트가 존재하는지, 서버 URL이 정확한지 확인하십시오."))
                 return {"error": "AI 서버에서 분석 API 엔드포인트를 찾을 수 없습니다 (404 Not Found)."}
 
             response.raise_for_status()
-            result = response.json()
-            
-            if 'choices' in result and result['choices'] and 'message' in result['choices'][0] and 'content' in result['choices'][0]['message']:
-                analysis_content = result['choices'][0]['message']['content']
-                try:
-                    return json.loads(analysis_content)
-                except json.JSONDecodeError:
-                    print(Color.error("  - AI 응답이 유효한 JSON 형식이 아닙니다. 원본 텍스트를 반환합니다."))
-                    return {"analysis_summary": analysis_content, "key_issues": []}
-            else:
-                 return {"error": "AI 모델로부터 유효한 응답을 받지 못했습니다.", "details": result}
+            # [수정] 서버가 직접 분석 결과를 JSON으로 반환하므로 바로 파싱하여 사용
+            return response.json()
+
         except requests.exceptions.RequestException as e:
             print(Color.error(f"  - AI 서버 통신 오류: {e}"))
             return {"error": f"AI 서버 통신 중 오류가 발생했습니다: {e}"}
-
-    def _generate_prompt(self, data: Dict[str, Any]) -> str:
-        """AI 분석을 위한 프롬프트를 생성합니다."""
-        system_info = data.get('system_info', {})
-        performance = data.get('performance', {})
-        critical_logs = data.get('critical_logs', [])
-        kb_findings = data.get('kb_findings', [])
-        security_findings = data.get('security_findings', [])
-
-        prompt = f"""
-        당신은 수년간의 경험을 가진 최고의 리눅스 시스템 엔지니어입니다. 제공된 sosreport 데이터를 기반으로 시스템의 상태를 종합적으로 분석하고, 잠재적인 문제점과 해결책을 제시해 주십시오.
-
-        **분석 요청:**
-        1.  **종합 분석 요약 (analysis_summary)**: 시스템의 전반적인 상태를 평가하고, 규칙 기반 진단과 보안 감사 결과를 포함하여 가장 중요한 문제점들을 요약해 주세요. (3~4 문장)
-        2.  **핵심 이슈 및 권장 조치 (key_issues)**: 발견된 주요 문제점들을 목록으로 정리하고, 각 문제에 대한 구체적인 원인과 해결 방안을 제시해 주세요. 형식: `[{{"issue": "문제점 요약", "cause": "예상 원인", "solution": "권장 해결책"}}]`
-
-        **입력 데이터:**
-        -   **System Info**: {json.dumps(system_info, indent=2, ensure_ascii=False)}
-        -   **Rule-Based System Diagnostics**: {json.dumps(kb_findings, indent=2, ensure_ascii=False)}
-        -   **Automated Security Audit**: {json.dumps(security_findings, indent=2, ensure_ascii=False)}
-        -   **Critical Log Entries**: {json.dumps(critical_logs, indent=2, ensure_ascii=False)}
-
-        **출력 형식 (반드시 다음 JSON 구조를 준수해 주세요):**
-        ```json
-        {{
-            "analysis_summary": "...",
-            "key_issues": [
-                {{
-                    "issue": "...",
-                    "cause": "...",
-                    "solution": "..."
-                }}
-            ]
-        }}
-        ```
-        """
-        return prompt
+        except json.JSONDecodeError:
+            print(Color.error(f"  - AI 서버 응답이 유효한 JSON 형식이 아닙니다. 응답 텍스트: {response.text}"))
+            return {"error": "AI 서버로부터 유효하지 않은 JSON 응답을 받았습니다."}
 
 def decompress_sosreport(archive_path: str, extract_to: str):
     """tar 아카이브를 지정된 디렉터리에 압축 해제합니다."""
@@ -336,8 +295,8 @@ class ReportGenerator:
                 <tr>
                     <td><span class="severity" style="{style}">{html.escape(severity)}</span></td>
                     <td>{html.escape(item['name'])}</td>
-                    <td>{html.escape(item['description'])}</td>
-                    <td>{html.escape(item['solution'])}</td>
+                    <td>{html.escape(str(item.get('description', '')))}</td>
+                    <td>{html.escape(str(item.get('solution', '')))}</td>
                 </tr>
                 """
             return html_str + "</table>"
@@ -345,11 +304,15 @@ class ReportGenerator:
         kb_html = generate_findings_table("규칙 기반 시스템 진단", kb_findings)
         security_html = generate_findings_table("자동화된 보안 감사", security_findings)
             
-        ai_summary = html.escape(ai_result.get('analysis_summary', 'AI 분석 요약을 가져오는 데 실패했습니다.'))
+        ai_summary_text = ai_result.get('analysis_summary', 'AI 분석 요약을 가져오는 데 실패했습니다.')
+        if isinstance(ai_summary_text, dict): # In case of error response
+            ai_summary_text = ai_result.get('error', 'Unknown error from AI server.')
+
+        ai_summary = html.escape(ai_summary_text)
         ai_issues = ai_result.get('key_issues', [])
         ai_html = "<h2>AI 기반 종합 분석</h2>"
         if "error" in ai_result:
-            ai_html += f"<p class='summary error'>{html.escape(ai_result['error'])}</p>"
+            ai_html += f"<p class='summary error'><strong>오류:</strong> {html.escape(ai_result['error'])}</p>"
         ai_html += f"<p class='summary'>{ai_summary}</p>"
 
         if ai_issues:
@@ -399,7 +362,14 @@ class ReportGenerator:
         </html>
         """
         
-        report_filename = f"analysis-report-{Path(archive_name).stem}.html"
+        # [수정] 서버의 analysis_id 생성 로직과 일치시키기 위한 로직
+        base_name = archive_name
+        for ext in ['.tar.gz', '.tgz', '.tar.xz', '.txz', '.tar.bz2', '.tbz2']:
+            if base_name.endswith(ext):
+                base_name = base_name[:-len(ext)]
+                break
+        
+        report_filename = f"analysis-report-{base_name}.html"
         report_path = Path(output_dir) / report_filename
         report_path.write_text(html_content, encoding='utf-8')
         return str(report_path)
@@ -408,10 +378,13 @@ def main():
     parser = argparse.ArgumentParser(description="sosreport 분석 및 AI 기반 리포트 생성기")
     parser.add_argument("sosreport_archive", help="분석할 sosreport 압축 파일 경로")
     parser.add_argument("--server-url", required=True, help="AIBox API 서버 URL")
-    parser.add_argument("--output", default="reports", help="결과 보고서가 저장될 디렉터리")
+    parser.add_argument("--output", default="output", help="결과 보고서가 저장될 디렉터리")
     args = parser.parse_args()
-
-    os.makedirs(args.output, exist_ok=True)
+    
+    # [수정] AIBox 서버의 OUTPUT_FOLDER와 경로 일치
+    script_dir = Path(__file__).parent
+    output_path = script_dir / args.output
+    os.makedirs(output_path, exist_ok=True)
     
     extract_target_dir = None
     try:
@@ -430,9 +403,9 @@ def main():
         api_client = AIBoxAPIClient(server_url=args.server_url)
         ai_analysis_result = api_client.analyze_system(sos_data)
         
-        report_generator = ReportGenerator(output_dir=args.output)
+        report_generator = ReportGenerator(output_dir=output_path)
         graphs = report_generator.create_performance_graphs(sos_data)
-        html_path = report_generator.create_html_report(ai_analysis_result, sos_data, graphs, args.output, args.sosreport_archive)
+        html_path = report_generator.create_html_report(ai_analysis_result, sos_data, graphs, output_path, Path(args.sosreport_archive).name)
         
         print(Color.header("\n분석이 성공적으로 완료되었습니다!"))
         print(f"  - HTML 보고서: {Color.cyan(html_path)}")
@@ -448,4 +421,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
