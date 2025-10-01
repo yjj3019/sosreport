@@ -2,13 +2,17 @@
 
 # -*- coding: utf-8 -*-
 # ==============================================================================
-# Unified AI Server (v7.2 - LLM 응답 안정성 강화)
+# Unified AI Server (v7.4 - Nginx 프록시 환경 완벽 지원)
 # ------------------------------------------------------------------------------
 # 기능:
 # 1. 원본 서버의 모든 기능 완벽 복원
 # 2. sos_analyzer.py 연동 기능 통합
 # 3. LLM 모델 조회 기능 추가
-# 4. [수정] LLM으로부터 비어있는 응답을 받았을 때 발생하는 JSON 파싱 오류 해결
+# 4. LLM으로부터 비어있는 응답을 받았을 때 발생하는 JSON 파싱 오류 해결
+# 5. 분석 ID 생성 로직을 강화하여 다양한 압축 확장자 지원
+# 6. 상태 확인 API가 분석 스크립트가 생성하는 실제 리포트 파일명을 정확히 추적하도록 수정
+# 7. [수정] Nginx 리버스 프록시 환경에서 X-Forwarded-Proto, X-Forwarded-Host 헤더를 기반으로
+#    정확한 콜백 URL을 생성하여 sos_analyzer.py에 전달하도록 수정
 # ==============================================================================
 
 # --- 1. 라이브러리 임포트 ---
@@ -45,7 +49,11 @@ log.addFilter(HealthCheckFilter())
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+# [수정] Nginx 경로를 포함하여 API 라우팅을 그룹화하기 위한 Blueprint 사용 준비
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+CORS(app, resources={r"/AIBox/api/*": {"origins": "*"}})
 
 # --- 3. 전역 변수 및 설정 ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -290,25 +298,28 @@ def log_request_info():
     if '/api/health' not in request.path:
         logging.info(f"Request ===> Path: {request.path}, Method: {request.method}, From: {request.remote_addr}")
 
-@app.route('/')
+# [수정] Nginx 경로를 고려하여 /AIBox 접두사 추가
+@app.route('/AIBox/')
 def route_index_user(): return send_from_directory(SCRIPT_DIR, 'upload.html')
-@app.route('/user')
+@app.route('/AIBox/upload.html')
+def route_index_user_explicit(): return send_from_directory(SCRIPT_DIR, 'upload.html')
+@app.route('/AIBox/user.html')
 def route_user(): return send_from_directory(SCRIPT_DIR, 'user.html')
-@app.route('/admin')
+@app.route('/AIBox/admin.html')
 def route_admin(): return send_from_directory(SCRIPT_DIR, 'admin.html')
-@app.route('/cve')
+@app.route('/AIBox/cve_report.html')
 def route_cve(): return send_from_directory(SCRIPT_DIR, 'cve_report.html')
-@app.route('/cron')
+@app.route('/AIBox/cron.html')
 def route_cron(): return send_from_directory(SCRIPT_DIR, 'cron.html')
-@app.route('/output/<path:filename>')
+@app.route('/AIBox/output/<path:filename>')
 def route_output(filename): return send_from_directory(app.config['OUTPUT_FOLDER'], filename)
 
-@app.route('/api/health', methods=['GET'])
+@app.route('/AIBox/api/health', methods=['GET'])
 def api_health(): return jsonify({"status": "ok", "instance_id": SERVER_INSTANCE_ID})
-@app.route('/api/config', methods=['GET'])
+@app.route('/AIBox/api/config', methods=['GET'])
 def api_config(): return jsonify({"model": CONFIG.get("model", "N/A")})
 
-@app.route('/api/models', methods=['GET'])
+@app.route('/AIBox/api/models', methods=['GET'])
 def api_get_models():
     models = get_available_models(CONFIG["llm_url"], CONFIG.get("token"))
     if not models:
@@ -317,11 +328,11 @@ def api_get_models():
 
 # --- 이하 코드는 이전과 동일 ... ---
 
-@app.route('/api/verify-password', methods=['POST'])
+@app.route('/AIBox/api/verify-password', methods=['POST'])
 def api_verify_password():
     return jsonify({"success": request.json.get('password') == CONFIG.get("password")})
 
-@app.route('/api/prompts', methods=['GET', 'POST'])
+@app.route('/AIBox/api/prompts', methods=['GET', 'POST'])
 def api_prompts():
     if request.method == 'POST':
         data = request.json
@@ -341,7 +352,7 @@ def api_prompts():
             data_to_send = [{"key": k, "value": f"{v.get('system_message', '')}{PROMPT_SEPARATOR}{v.get('user_template', '')}"} for k, v in PROMPTS.items()]
             return Response(json.dumps(data_to_send, ensure_ascii=False), mimetype='application/json; charset=utf-8')
 
-@app.route('/api/analyze', methods=['POST'])
+@app.route('/AIBox/api/analyze', methods=['POST'])
 def api_analyze():
     data = request.json
     with PROMPT_LOCK: prompt_config = PROMPTS.get(data.get('prompt_key'), {})
@@ -349,7 +360,7 @@ def api_analyze():
     user_msg = prompt_config.get('user_template', '{user_query}').replace('{user_query}', data.get('user_query'))
     return Response(call_llm_stream(system_msg, user_msg), mimetype='text/plain; charset=utf-8')
 
-@app.route('/api/cve/analyze', methods=['POST'])
+@app.route('/AIBox/api/cve/analyze', methods=['POST'])
 def api_cve_analyze_for_script():
     try:
         cve_data = request.json
@@ -360,13 +371,13 @@ def api_cve_analyze_for_script():
         logging.error(f"CVE 분석 오류: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/cve/executive_summary', methods=['POST'])
+@app.route('/AIBox/api/cve/executive_summary', methods=['POST'])
 def api_cve_summary_for_script():
     prompt = f"[Vulnerabilities]\n{json.dumps(request.json.get('top_cves', []), indent=2, ensure_ascii=False)}\n\n[Task]\nWrite a professional Executive Summary in Korean."
     summary = call_llm_blocking("You are a cybersecurity expert.", prompt)
     return Response(summary.replace("\n", "<br>") if summary else "", mimetype='text/html')
 
-@app.route('/api/cve/report', methods=['POST'])
+@app.route('/AIBox/api/cve/report', methods=['POST'])
 def api_cve_report_for_html():
     cve_id = request.json.get('cve_id')
     rh_data = {}
@@ -378,7 +389,7 @@ def api_cve_report_for_html():
     final_data["comprehensive_summary"] = summary
     return jsonify(final_data)
 
-@app.route('/api/schedules', methods=['GET', 'POST'])
+@app.route('/AIBox/api/schedules', methods=['GET', 'POST'])
 def api_schedules():
     schedule_file = CONFIG.get("schedule_file")
     if request.method == 'POST':
@@ -391,14 +402,14 @@ def api_schedules():
         if not os.path.isfile(schedule_file): return jsonify([])
         with open(schedule_file, 'r', encoding='utf-8') as f: return jsonify(json.load(f))
 
-@app.route('/api/schedules/execute', methods=['POST'])
+@app.route('/AIBox/api/schedules/execute', methods=['POST'])
 def api_execute_schedule():
     data = request.json
     if data.get('password') != CONFIG.get("password"): return jsonify({"error": "Unauthorized"}), 401
     threading.Thread(target=run_scheduled_script, args=(data.get('script'),)).start()
     return jsonify({"success": True, "message": f"Execution started for {data.get('script')}"})
 
-@app.route('/api/logs/scheduler', methods=['GET', 'DELETE'])
+@app.route('/AIBox/api/logs/scheduler', methods=['GET', 'DELETE'])
 def api_scheduler_logs():
     log_file = CONFIG.get("scheduler_log_file")
     if request.method == 'DELETE':
@@ -409,7 +420,7 @@ def api_scheduler_logs():
         if not os.path.isfile(log_file): return jsonify([])
         with open(log_file, 'r', encoding='utf-8') as f: return jsonify(f.readlines()[-100:])
 
-@app.route('/api/upload', methods=['POST'])
+@app.route('/AIBox/api/upload', methods=['POST'])
 def api_upload():
     file = request.files.get('sosreportFile')
     if not file: return jsonify({"error": "No file part."}), 400
@@ -417,25 +428,32 @@ def api_upload():
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(file_path)
     
-    host_parts = request.host.split(':', 1)
-    server_host = host_parts[0]
-    server_port = CONFIG.get('port', 5000) 
-    server_callback_url = f"http://{server_host}:{server_port}"
-    
+    # [수정] Nginx 뒤에서 동작하는 것을 감지하고 올바른 외부 URL 생성
+    scheme = request.headers.get('X-Forwarded-Proto', 'http')
+    host = request.headers.get('X-Forwarded-Host', request.host)
+    # Nginx 설정에서 /AIBox/api/ -> /api/ 로 프록시되므로, 콜백 URL은 /AIBox 를 포함해야 함
+    server_callback_url = f"{scheme}://{host}/AIBox"
+
     logging.info(f"sos_analyzer 실행 (콜백 URL: {server_callback_url})")
     command = ["python3", SOS_ANALYZER_SCRIPT, "--server-url", server_callback_url, file_path]
     subprocess.Popen(command)
-    analysis_id = filename.rsplit('.', 2)[0]
+
+    base_name = filename
+    for ext in ['.tar.gz', '.tgz', '.tar.xz', '.txz', '.tar.bz2', '.tbz2']:
+        if base_name.endswith(ext):
+            base_name = base_name[:-len(ext)]
+            break
+    analysis_id = base_name
     return jsonify({"message": "Analysis started.", "analysis_id": analysis_id})
 
-@app.route('/api/status/<analysis_id>', methods=['GET'])
+@app.route('/AIBox/api/status/<analysis_id>', methods=['GET'])
 def api_status(analysis_id):
-    report_path = os.path.join(app.config['OUTPUT_FOLDER'], f"{analysis_id}_report.html")
+    report_path = os.path.join(app.config['OUTPUT_FOLDER'], f"analysis-report-{analysis_id}.html")
     if os.path.exists(report_path):
         return jsonify({"status": "complete"})
     return jsonify({"status": "running"})
 
-@app.route('/api/reports', methods=['GET', 'DELETE'])
+@app.route('/AIBox/api/reports', methods=['GET', 'DELETE'])
 def api_list_reports():
     if request.method == 'DELETE':
         filename = request.args.get('file')
@@ -449,7 +467,7 @@ def api_list_reports():
         try:
             reports = []
             for f in os.listdir(OUTPUT_FOLDER):
-                if f.endswith('_report.html'):
+                if f.startswith('analysis-report-') and f.endswith('.html'):
                     file_path = os.path.join(OUTPUT_FOLDER, f)
                     mtime = os.path.getmtime(file_path)
                     reports.append({"name": f, "mtime": mtime})
@@ -460,7 +478,7 @@ def api_list_reports():
             logging.error(f"/api/reports 오류: {e}", exc_info=True)
             return jsonify({"error": "리포트 목록을 가져오는 데 실패했습니다."}), 500
 
-@app.route('/api/sos/analyze_system', methods=['POST'])
+@app.route('/AIBox/api/sos/analyze_system', methods=['POST'])
 def api_sos_analyze_system():
     try:
         data_str = json.dumps(request.json, indent=2, ensure_ascii=False, default=str)
@@ -469,38 +487,30 @@ def api_sos_analyze_system():
 ## 분석 데이터
 ```json
 {data_str}
+```
+
+## 출력 형식 (반드시 아래 JSON 구조를 준수하고, 다른 설명 없이 JSON 객체만 반환해주세요):
+```json
 {{
-  "system_status": "정상|주의|위험", "overall_health_score": 100,
-  "critical_issues": ["상세한 문제 설명"], "warnings": ["주의가 필요한 사항"],
-  "recommendations": [{{"priority": "높음|중간|낮음", "category": "성능|보안|안정성", "issue": "문제점", "solution": "해결 방안"}}],
-  "summary": "종합 요약"
+  "analysis_summary": "시스템 전반에 대한 3~4 문장의 종합 요약",
+  "key_issues": [
+    {{
+      "issue": "발견된 핵심 문제점 1",
+      "cause": "문제점 1의 기술적인 원인 분석",
+      "solution": "문제점 1에 대한 구체적인 해결 방안 또는 명령어"
+    }},
+    {{
+      "issue": "발견된 핵심 문제점 2",
+      "cause": "문제점 2의 기술적인 원인 분석",
+      "solution": "문제점 2에 대한 구체적인 해결 방안 또는 명령어"
+    }}
+  ]
 }}
 ```"""
-        response_str = call_llm_blocking("You are a helpful assistant designed to output JSON.", prompt)
+        response_str = call_llm_blocking("You are a helpful assistant designed to output only a single valid JSON object.", prompt)
         return jsonify(_parse_llm_json_response(response_str))
     except Exception as e:
         logging.error(f"/api/sos/analyze_system 오류: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error", "details": str(e)}), 500
-
-@app.route('/api/sos/rank_cves', methods=['POST'])
-def api_sos_rank_cves():
-    try:
-        data = request.json
-        prompt = f"[시스템 역할] RHEL 보안 분석가.\n[시스템 정보] OS: {data.get('system_info', {}).get('os_version', 'N/A')}\n[임무] 아래 CVE 목록에서 가장 시급한 최대 {data.get('max_cves', 10)}개를 선정하라.\n[입력 데이터] {json.dumps(data.get('cves_for_ranking', []), indent=2, ensure_ascii=False)}\n[출력 형식] \"most_urgent_cves\": [\"CVE-...\", ...] 키를 포함하는 JSON 객체만 출력."
-        response_str = call_llm_blocking("You are a helpful assistant designed to output JSON.", prompt, max_tokens=4096)
-        return jsonify(_parse_llm_json_response(response_str))
-    except Exception as e:
-        logging.error(f"/api/sos/rank_cves 오류: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error", "details": str(e)}), 500
-
-@app.route('/api/sos/summarize_cves', methods=['POST'])
-def api_sos_summarize_cves():
-    try:
-        prompt = f"[시스템 역할] RHEL 보안 전문가. 주어진 각 CVE의 영문 설명을 분석하여 한국어로 요약 설명하라.\n[입력 데이터] {json.dumps(request.json.get('cves_to_process', []), indent=2, ensure_ascii=False)}\n[출력 형식] \"processed_cves\": [{{\"cve_id\": \"...\", \"translated_description\": \"...\"}}] 키를 포함하는 JSON 객체만 출력."
-        response_str = call_llm_blocking("You are a helpful assistant designed to output JSON.", prompt)
-        return jsonify(_parse_llm_json_response(response_str))
-    except Exception as e:
-        logging.error(f"/api/sos/summarize_cves 오류: {e}", exc_info=True)
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
 # --- 7. 서버 실행 ---
@@ -550,3 +560,4 @@ if __name__ == '__main__':
 
     logging.info(f"--- Unified AI Server starting on http://{args.host}:{args.port} ---")
     serve(app, host=args.host, port=args.port, threads=16)
+
