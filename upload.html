@@ -211,7 +211,8 @@
     </main>
 
     <script>
-        const API_BASE_PATH = '';
+        // [수정] Nginx 리버스 프록시 경로를 반영한 API 기본 경로 설정
+        const API_BASE_PATH = '/AIBox'; 
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
         const fileDisplay = document.getElementById('file-display');
@@ -268,6 +269,7 @@
             fileNameEl.textContent = file.name;
             fileDisplay.style.display = 'block';
             uploadButton.disabled = false;
+            resetProgress();
         }
 
         function resetProgress() {
@@ -279,7 +281,7 @@
             timerDisplay.textContent = "";
         }
 
-        async function uploadAndAnalyze() {
+        function uploadAndAnalyze() {
             const file = fileInput.files[0];
             if (!file) {
                 alert('파일을 선택해주세요.');
@@ -288,9 +290,10 @@
 
             uploadButton.disabled = true;
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('sosreportFile', file);
 
             const xhr = new XMLHttpRequest();
+            // [수정] API_BASE_PATH를 사용하여 올바른 업로드 URL 생성
             xhr.open('POST', `${API_BASE_PATH}/api/upload`, true);
 
             xhr.upload.onprogress = function(e) {
@@ -304,12 +307,13 @@
             xhr.onload = function() {
                 if (xhr.status === 200) {
                     progressText.textContent = '서버에서 분석 중...';
+                    const response = JSON.parse(xhr.responseText);
+                    checkAnalysisStatus(response.analysis_id);
                     startTimer();
-                    checkAnalysisCompletion(file.name);
                 } else {
-                    progressText.textContent = `업로드 실패: ${xhr.statusText}`;
+                    // [개선] 더 상세한 오류 메시지 제공
+                    progressText.textContent = `업로드 실패: ${xhr.status} ${xhr.statusText}`;
                     progressBarInner.style.backgroundColor = 'var(--error-color)';
-                    resetProgress();
                     uploadButton.disabled = false;
                 }
             };
@@ -317,23 +321,24 @@
             xhr.onerror = function() {
                 progressText.textContent = '업로드 중 네트워크 오류 발생';
                 progressBarInner.style.backgroundColor = 'var(--error-color)';
-                resetProgress();
                 uploadButton.disabled = false;
             };
             
             xhr.send(formData);
         }
 
-        async function checkAnalysisCompletion(originalFileName) {
-            const baseName = originalFileName.includes('.') ? originalFileName.substring(0, originalFileName.lastIndexOf('.')) : originalFileName;
-            const reportFileName = `analysis-report-${baseName}.html`;
+        function checkAnalysisStatus(analysisId) {
             const intervalId = setInterval(async () => {
                 try {
-                    const response = await fetch(`${API_BASE_PATH}/api/reports/${reportFileName}`);
-                    if (response.ok) {
+                    // [수정] API_BASE_PATH를 사용하여 올바른 상태 확인 URL 생성
+                    const response = await fetch(`${API_BASE_PATH}/api/status/${analysisId}`);
+                    if (!response.ok) return; 
+
+                    const result = await response.json();
+                    if (result.status === 'complete') {
                         clearInterval(intervalId);
                         clearInterval(analysisTimer);
-                        progressText.textContent = `분석 완료! (총 ${secondsElapsed}초)`;
+                        progressText.textContent = `분석 완료! (총 ${secondsElapsed}초 소요)`;
                         progressBarInner.style.backgroundColor = 'var(--success-color)';
                         progressBarInner.style.width = '100%';
                         setTimeout(() => {
@@ -343,13 +348,14 @@
                         }, 2000);
                     }
                 } catch (error) {
-                    // Not yet complete, continue polling
+                    console.error("Analysis status check failed:", error);
                 }
             }, 5000);
         }
 
         async function fetchReports() {
             try {
+                // [수정] API_BASE_PATH를 사용하여 올바른 리포트 목록 URL 생성
                 const response = await fetch(`${API_BASE_PATH}/api/reports`);
                 if (!response.ok) throw new Error('Could not fetch reports list.');
                 const reports = await response.json();
@@ -360,9 +366,10 @@
                 } else {
                     reports.forEach(report => {
                         const li = document.createElement('li');
+                        const reportName = report.name;
                         li.innerHTML = `
-                            <a href="/api/reports/${report}" target="_blank">${report}</a>
-                            <button class="delete-btn" onclick="deleteReport('${report}')">&times;</button>
+                            <a href="${API_BASE_PATH}/output/${reportName}" target="_blank">${reportName}</a>
+                            <button class="delete-btn" onclick="deleteReport('${reportName}')">&times;</button>
                         `;
                         reportList.appendChild(li);
                     });
@@ -376,9 +383,10 @@
         async function deleteReport(filename) {
             if (!confirm(`'${filename}' 리포트를 정말 삭제하시겠습니까?`)) return;
             try {
-                const response = await fetch(`${API_BASE_PATH}/api/reports/${filename}`, { method: 'DELETE' });
+                // [수정] API_BASE_PATH를 사용하여 올바른 삭제 URL 생성
+                const response = await fetch(`${API_BASE_PATH}/api/reports?file=${encodeURIComponent(filename)}`, { method: 'DELETE' });
                 const result = await response.json();
-                if (!response.ok) throw new Error(result.error);
+                if (!response.ok) throw new Error(result.error || 'Delete failed');
                 fetchReports();
             } catch (error) {
                 alert(`리포트 삭제 중 오류가 발생했습니다: ${error.message}`);
@@ -387,6 +395,7 @@
 
         async function checkServerStatus() {
             try {
+                // [수정] API_BASE_PATH를 사용하여 올바른 서버 상태 URL 생성
                 const response = await fetch(`${API_BASE_PATH}/api/config`);
                 if (!response.ok) throw new Error('Server status check failed');
                 const config = await response.json();
