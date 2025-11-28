@@ -521,11 +521,25 @@ class SosreportParser:
         if log_content == 'N/A': return {"critical_log_events": []}
         
         lines = log_content.split('\n')
+        # [Expert Fix] 현재 연도와 월 가져오기 (연말연시 로그 날짜 보정용)
+        current_year = self.report_date.year
+        current_month = self.report_date.month
+
         for i, line in enumerate(lines):
-            match = re.match(r'^([A-Za-z]{3}\s+\d{1-2}\s+\d{2}:\d{2}:\d{2})', line)
+            match = re.match(r'^([A-Za-z]{3})\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})', line)
             if match:
-                try: log_dt = datetime.datetime.strptime(f"{self.report_date.year} {match.group(1)}", '%Y %b %d %H:%M:%S')
+                month_str, day_str, time_str = match.groups()
+                try:
+                    # 1. 임시로 날짜 생성
+                    temp_dt = datetime.datetime.strptime(f"{current_year} {month_str} {day_str} {time_str}", '%Y %b %d %H:%M:%S')
+                    
+                    # 2. [Year Rollover Fix] 로그의 월이 현재 월보다 크면(예: 현재 1월, 로그 12월) 작년으로 간주
+                    if temp_dt.month > current_month:
+                        temp_dt = temp_dt.replace(year=current_year - 1)
+                    
+                    log_dt = temp_dt # 수정된 날짜 사용
                 except ValueError: continue
+                
                 event_type, context = None, {}
                 
                 if 'i/o error' in line.lower():
@@ -590,7 +604,10 @@ class SosreportParser:
         # [개선] 하드코딩된 패턴 대신 log_patterns.yaml 파일을 동적으로 로드하여 사용합니다.
         # 이를 통해 코드 수정 없이 YAML 파일만으로 로그 정규화 규칙을 관리할 수 있습니다.
         PATTERNS_TO_NORMALIZE = []
-        patterns_file = Path(__file__).parent / 'log_patterns.yaml'
+        # [Expert Fix] 현재 파일의 상위 디렉토리(Parent)로 이동하여 파일 찾기
+        # resolve()를 사용하여 심볼릭 링크 문제를 방지하고 절대 경로로 변환 후 상위로 이동
+        patterns_file = Path(__file__).resolve().parent.parent / 'log_patterns.yaml'
+        
         if patterns_file.exists():
             try:
                 with open(patterns_file, 'r', encoding='utf-8') as f:
@@ -618,36 +635,43 @@ class SosreportParser:
             return {}
         logging.info(f"  - 스마트 로그 분석 대상 파일: {[f.name for f in log_files_to_process]}")
 
+        # [Expert Fix] log_patterns.yaml에 정의된 패턴을 추적하기 위한 Set
+        known_patterns = set()
+
         # [BUG FIX] 로그 파일 처리 로직을 try-except 블록 밖으로 이동하여 변수 범위 문제를 해결합니다.
         for log_file in log_files_to_process:
             if any(log_file.name.endswith(ext) for ext in ['.gz', '.xz', '.bz2', 'lastlog', 'wtmp', 'btmp']):
                 continue
             
             try:
-                content = log_file.read_text(encoding='utf-8', errors='ignore')
-                lines = content.split('\n')
+                # [Expert Fix] 대용량 파일 처리를 위해 줄 단위로 읽기 (Generator)
+                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line: continue
+                        
+                        normalized_pattern = line
+                        is_matched_by_yaml = False # [Expert Fix] YAML 패턴 매칭 여부
 
-                for line in lines:
-                    if not line.strip(): continue
-                    
-                    # [사용자 요청] 어떤 패턴이 적용되었는지 추적하기 위해 정규화 과정을 수정합니다.
-                    normalized_pattern = line
-                    for name, regex, placeholder in PATTERNS_TO_NORMALIZE:
-                        # re.subn()은 치환된 문자열과 치환 횟수를 튜플로 반환합니다.
-                        new_pattern, num_subs = regex.subn(placeholder, normalized_pattern)
-                        if num_subs > 0:
-                            # [사용자 요청] 로그가 너무 많아 가독성을 해치므로, 로그 레벨을 DEBUG로 변경합니다.
-                            logging.debug(f"    -> Log line normalized by pattern '{name}'.")
-                            normalized_pattern = new_pattern
+                        for name, regex, placeholder in PATTERNS_TO_NORMALIZE:
+                            new_pattern, num_subs = regex.subn(placeholder, normalized_pattern)
+                            if num_subs > 0:
+                                normalized_pattern = new_pattern
+                                is_matched_by_yaml = True # 매칭됨
 
-                    final_pattern = re.sub(r'\s+', ' ', normalized_pattern).strip()
-                    
-                    # dmesg 로그는 'dmesg'라는 가상 파일명으로 통일하여 처리
-                    filename_key = 'dmesg' if 'dmesg' in log_file.name else log_file.name
-                    pattern_key = (filename_key, final_pattern)
-                    all_patterns[pattern_key] += 1
-                    if pattern_key not in pattern_examples:
-                        pattern_examples[pattern_key] = line
+                        final_pattern = re.sub(r'\s+', ' ', normalized_pattern).strip()
+                        
+                        # dmesg 로그는 'dmesg'라는 가상 파일명으로 통일하여 처리
+                        filename_key = 'dmesg' if 'dmesg' in log_file.name else log_file.name
+                        pattern_key = (filename_key, final_pattern)
+                        
+                        all_patterns[pattern_key] += 1
+                        
+                        if is_matched_by_yaml:
+                            known_patterns.add(pattern_key) # [Expert Fix] YAML 매칭된 패턴 등록
+
+                        if pattern_key not in pattern_examples:
+                            pattern_examples[pattern_key] = line
             except Exception as e:
                 logging.warning(f"  - 로그 파일 '{log_file.name}' 처리 중 오류 발생: {e}")
 
@@ -666,37 +690,39 @@ class SosreportParser:
         keyword_log_count = 0
         selected_patterns = set() # 중복 계산 방지
 
-        # [요청사항] 시스템 영향 분석을 위한 핵심 키워드 목록 강화
-        # 기존의 단순 오류 키워드에서 더 구체적이고 심층적인 키워드로 확장합니다.
-        # [사용자 요청] pacemaker 관련 로그 패턴 추가 (lost, OFFLINE, Quorum lost, link... DOWN)
+        # [Expert Fix] log_patterns.yaml에 정의된 모든 에러 유형을 커버하도록 키워드 대폭 강화 (Fallback용)
         CORE_KEYWORDS = re.compile(
             # [BUG FIX] 여러 줄의 문자열을 괄호로 묶어 하나의 문자열로 합칩니다.
             # 각 줄 끝에 쉼표가 누락되어 발생하던 'unterminated subpattern' 오류를 해결합니다.
-            (r'\b(error|failed|failure|critical|panic|denied|segfault|corrupt|unrecoverable|'  # 일반 오류
-             r'stonith|fencing|fence|split-brain|standby|primary|secondary|sync|failover|quorum|unfenced|inconsistent|'  # HA 클러스터
-             r'i/o error|out of memory|oom-killer|hung|deadlock|'  # 시스템 문제
-             r'lost|OFFLINE|Quorum lost|link.*DOWN)\b'),  # Pacemaker 상태
+            (r'\b(error|failed|failure|critical|panic|denied|segfault|corrupt|unrecoverable|'
+             r'stonith|fencing|fence|split-brain|standby|primary|secondary|sync|failover|quorum|unfenced|inconsistent|'
+             r'i/o error|out of memory|oom-killer|hung|deadlock|'
+             r'lost|OFFLINE|Quorum lost|link.*DOWN|'  # 기존 키워드
+             r'abort|aborted|warning|warn|timeout|timed-out|full|dropping|rejecting|' # [추가 1] 일반적인 경고/중단
+             r'oops|bug|unable|read-only|ro|offline|blocked|disabled)\b'), # [추가 2] 커널/FS/장치 관련 핵심 키워드
             re.IGNORECASE)
 
         for (filename, pattern), count in all_patterns.items():
-            # [사용자 요청] 필터링 로직 강화: 이제 '핵심 키워드'를 포함하는 로그만 분석 대상으로 삼습니다.
-            # 단순히 희귀하다는 이유만으로 로그를 포함하지 않아, 부팅 메시지 등 정상적인 저빈도 로그를 제외합니다.
+            pattern_key = (filename, pattern)
+            
+            # [Expert Fix] 통합 필터링 로직: 키워드가 있거나(OR) YAML에 정의된 패턴이면 무조건 수집
             is_significant_keyword = CORE_KEYWORDS.search(pattern)
+            is_defined_in_yaml = pattern_key in known_patterns
 
-            if is_significant_keyword:
+            if is_significant_keyword or is_defined_in_yaml:
                 # [사용자 요청] 핵심 키워드를 포함하는 로그만 카운트하도록 로직 변경
-                pattern_key = (filename, pattern)
                 if pattern_key not in selected_patterns:
                     keyword_log_count += 1
                     selected_patterns.add(pattern_key)
 
                 if filename not in smart_log_analysis:
                     smart_log_analysis[filename] = []
+                
                 smart_log_analysis[filename].append({
                     "pattern": pattern,
                     "count": count,
                     # [문제 해결] AI가 분석의 근거가 되는 로그를 참조할 수 있도록 'example' 필드를 다시 활성화합니다.
-                    "example": pattern_examples[(filename, pattern)][:MAX_EXAMPLE_LENGTH]
+                    "example": pattern_examples[pattern_key][:MAX_EXAMPLE_LENGTH]
                 })
 
         # 파일별로 count 기준으로 정렬
@@ -705,7 +731,7 @@ class SosreportParser:
 
         total_selected = keyword_log_count
 
-        logging.info(Color.info(f"스마트 로그 분석 완료. 총 {total_selected}개의 핵심 키워드 기반 로그 패턴을 추출했습니다."))
+        logging.info(Color.info(f"스마트 로그 분석 완료. 총 {total_selected}개의 중요 로그 패턴을 추출했습니다."))
 
         return {"smart_log_analysis": smart_log_analysis}
 
@@ -846,6 +872,9 @@ class SosreportParser:
             'drbd_info': (parse_drbd_info, self),
             'sbd_info': (parse_sbd_info, self),
             'additional_info': (parse_additional_info, self),
+            
+            # [Expert Fix] 로그 분석 함수 등록 (필수) - 이 줄이 없으면 로그 분석이 실행되지 않음
+            'smart_log_analysis': (self._parse_and_patternize_logs,),
         }
 
         logging.info("데이터 파싱 시작 (병렬 처리)...")
@@ -862,6 +891,8 @@ class SosreportParser:
                         # [BUG FIX] ha_cluster_info가 아직 없을 수 있으므로 setdefault를 사용합니다. (KeyError 해결)
                         elif key == 'sbd_info' and result:
                             metadata.setdefault('ha_cluster_info', {})['sbd_status'] = result
+                        elif key == 'smart_log_analysis':
+                            metadata.update(result) # [Expert Fix] 로그 분석 결과 병합
                         else:
                             metadata[key] = result
 
