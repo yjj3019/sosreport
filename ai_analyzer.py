@@ -405,6 +405,7 @@ class AIAnalyzer:
                 "configurations": metadata.get("configurations"),
                 "incident_reports": metadata.get("incident_reports"),
                 "performance_analysis": metadata.get("performance_analysis"),
+                "smart_log_analysis": metadata.get("smart_log_analysis"),
             }
             data_chunks = {k: v for k, v in data_chunks.items() if v}
     
