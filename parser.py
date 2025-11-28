@@ -592,8 +592,9 @@ class SosreportParser:
         문제의 근본 원인이 될 수 있는 핵심 로그를 최상단으로 정렬합니다.
         
         [신규] log_patterns.yaml에 정의된 ignore: true 패턴은 분석에서 제외합니다.
+        [추가 개선] 숫자, IP, UUID 등의 변수를 일반화(<NUM>, <IP> 등)하여 유사 로그를 통합합니다.
         """
-        log_step("2. 스마트 로그 분석 및 패턴화 (심각도 기반 정렬 및 노이즈 필터링)")
+        log_step("2. 스마트 로그 분석 및 패턴화 (심각도 기반 정렬 및 노이즈 필터링, 유사 로그 통합)")
         log_dir = self.base_path / 'var/log'
         if not log_dir.is_dir():
             logging.warning(Color.warn(f"로그 디렉터리 '{log_dir}'를 찾을 수 없습니다. 스마트 로그 분석을 건너뜁니다."))
@@ -632,6 +633,19 @@ class SosreportParser:
         else:
              logging.warning(Color.warn(f"'{patterns_file.name}' 파일을 찾을 수 없어 로그 정규화가 제한적으로 수행될 수 있습니다."))
 
+        # [신규] 로그 일반화(Generalization)를 위한 정규식 패턴 정의
+        # 변수(IP, UUID, 숫자, Hex 등)를 통일된 플레이스홀더로 치환하여 패턴 가짓수를 줄입니다.
+        GENERIC_PATTERNS = [
+            (re.compile(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'), '<IP>'),
+            (re.compile(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', re.IGNORECASE), '<UUID>'),
+            (re.compile(r'\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b', re.IGNORECASE), '<MAC>'),
+            (re.compile(r'0x[0-9a-fA-F]+'), '<HEX>'),
+            # 날짜/시간 패턴 (HH:MM:SS)은 로그의 의미를 구분하는 데 중요할 수 있으나, 패턴 통합을 위해 <TIME>으로 치환
+            (re.compile(r'\d{2}:\d{2}:\d{2}'), '<TIME>'),
+            # 마지막으로 단순 숫자는 <NUM>으로 치환 (가장 범용적이므로 마지막에 적용)
+            (re.compile(r'\b\d+\b'), '<NUM>')
+        ]
+
         # 로그 파일 탐색 (messages, syslog, dmesg)
         messages_path = next((p for p in [log_dir / 'messages', log_dir / 'syslog'] if p.exists() and p.is_file() and p.stat().st_size > 0), None)
         dmesg_path = next((self.base_path / p for p in ['dmesg', 'sos_commands/kernel/dmesg'] if (self.base_path / p).exists()), None)
@@ -667,11 +681,18 @@ class SosreportParser:
                         normalized_pattern = line
                         is_matched_by_yaml = False 
 
+                        # 1. log_patterns.yaml에 정의된 명시적 패턴 적용
                         for name, regex, placeholder in PATTERNS_TO_NORMALIZE:
                             new_pattern, num_subs = regex.subn(placeholder, normalized_pattern)
                             if num_subs > 0:
                                 normalized_pattern = new_pattern
                                 is_matched_by_yaml = True 
+
+                        # 2. [추가] 일반화(Generalization) 적용
+                        # 명시적 패턴에 매칭되었더라도 남은 숫자나 변수들을 추가로 정규화하여 통합 효율을 높입니다.
+                        # 예: "Process 123 failed" -> "Process <NUM> failed"
+                        for g_regex, g_placeholder in GENERIC_PATTERNS:
+                            normalized_pattern = g_regex.sub(g_placeholder, normalized_pattern)
 
                         final_pattern = re.sub(r'\s+', ' ', normalized_pattern).strip()
                         filename_key = 'dmesg' if 'dmesg' in log_file.name else log_file.name
