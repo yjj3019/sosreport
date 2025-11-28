@@ -83,7 +83,7 @@ class SosreportParser:
                     return
         except Exception as e: logging.warning(f"sosreport 생성 날짜 파싱 중 오류 발생: {e}")
 
-        # [사용자 제안] date 파일 파싱 실패 시, sosreport 디렉터리 이름에서 날짜를 추출하는 폴백 로직을 추가합니다.
+        # [사용자 제안] date 파일 파싱 실패 시, sosreport 디렉터리 이름에서 날짜 추출을 시도합니다.
         if self.report_date is None:
             logging.warning(Color.warn("'date' 파일에서 날짜를 파싱하지 못했습니다. sosreport 디렉터리 이름에서 날짜 추출을 시도합니다."))
             try:
@@ -588,10 +588,12 @@ class SosreportParser:
 
     def _parse_and_patternize_logs(self) -> Dict[str, Any]:
         """
-        [핵심 개선] /var/log/의 모든 로그를 지능적으로 패턴화하고, 발생 빈도 기반의 이상 탐지를 통해
-        유의미한 로그만 추출하여 데이터 크기를 획기적으로 줄입니다.
+        [핵심 개선] /var/log/의 로그를 패턴화하고, '심각도'와 '빈도'를 복합적으로 고려하여
+        문제의 근본 원인이 될 수 있는 핵심 로그를 최상단으로 정렬합니다.
+        
+        [신규] log_patterns.yaml에 정의된 ignore: true 패턴은 분석에서 제외합니다.
         """
-        log_step("2. 스마트 로그 분석 및 패턴화")
+        log_step("2. 스마트 로그 분석 및 패턴화 (심각도 기반 정렬 및 노이즈 필터링)")
         log_dir = self.base_path / 'var/log'
         if not log_dir.is_dir():
             logging.warning(Color.warn(f"로그 디렉터리 '{log_dir}'를 찾을 수 없습니다. 스마트 로그 분석을 건너뜁니다."))
@@ -599,13 +601,13 @@ class SosreportParser:
 
         # 1. 모든 로그 라인을 읽어 패턴화하고 빈도수 계산
         all_patterns = Counter()
-        pattern_examples = {} # 각 패턴의 첫 번째 원본 로그 예시 저장
+        pattern_examples = {} 
         
-        # [개선] 하드코딩된 패턴 대신 log_patterns.yaml 파일을 동적으로 로드하여 사용합니다.
-        # 이를 통해 코드 수정 없이 YAML 파일만으로 로그 정규화 규칙을 관리할 수 있습니다.
+        # log_patterns.yaml 동적 로드 및 패턴 분류 (정규화 vs 무시)
         PATTERNS_TO_NORMALIZE = []
+        PATTERNS_TO_IGNORE = [] # [신규] 무시할 패턴 목록
+        
         # [Expert Fix] 현재 파일의 상위 디렉토리(Parent)로 이동하여 파일 찾기
-        # resolve()를 사용하여 심볼릭 링크 문제를 방지하고 절대 경로로 변환 후 상위로 이동
         patterns_file = Path(__file__).resolve().parent.parent / 'log_patterns.yaml'
         
         if patterns_file.exists():
@@ -614,103 +616,112 @@ class SosreportParser:
                     yaml_patterns = yaml.safe_load(f)
                     for item in yaml_patterns:
                         flags = re.IGNORECASE if item.get('ignorecase') else 0
-                        PATTERNS_TO_NORMALIZE.append(
-                            (item.get('name', 'Unnamed'), re.compile(item['regex'], flags), item['placeholder'])
-                        )
-                logging.info(f"  - '{patterns_file.name}'에서 {len(PATTERNS_TO_NORMALIZE)}개의 로그 정규화 패턴을 로드했습니다.")
+                        compiled_regex = re.compile(item['regex'], flags)
+                        
+                        # [신규] ignore 속성 확인
+                        if item.get('ignore', False):
+                            PATTERNS_TO_IGNORE.append(compiled_regex)
+                        else:
+                            PATTERNS_TO_NORMALIZE.append(
+                                (item.get('name', 'Unnamed'), compiled_regex, item['placeholder'])
+                            )
+                            
+                logging.info(f"  - '{patterns_file.name}' 로드 완료: 정규화 패턴 {len(PATTERNS_TO_NORMALIZE)}개, 무시 패턴 {len(PATTERNS_TO_IGNORE)}개")
             except Exception as e:
                 logging.error(f"'{patterns_file.name}' 파일 로딩 또는 파싱 중 오류 발생: {e}")
         else:
-            logging.warning(Color.warn(f"'{patterns_file.name}' 파일을 찾을 수 없어 로그 정규화가 제한적으로 수행될 수 있습니다."))
+             logging.warning(Color.warn(f"'{patterns_file.name}' 파일을 찾을 수 없어 로그 정규화가 제한적으로 수행될 수 있습니다."))
 
-        # [사용자 요청] LLM 부하 감소를 위해 로그 수집을 /var/log/messages 파일로 제한합니다.
-        # sosreport 구조에 따라 여러 경로에 있을 수 있는 messages 파일을 탐색합니다.
+        # 로그 파일 탐색 (messages, syslog, dmesg)
         messages_path = next((p for p in [log_dir / 'messages', log_dir / 'syslog'] if p.exists() and p.is_file() and p.stat().st_size > 0), None)
-        # [제안 반영] dmesg 로그도 스마트 패턴화 대상에 포함합니다.
         dmesg_path = next((self.base_path / p for p in ['dmesg', 'sos_commands/kernel/dmesg'] if (self.base_path / p).exists()), None)
-
         log_files_to_process = [f for f in [messages_path, dmesg_path] if f]
+
         if not log_files_to_process:
             logging.warning(Color.warn(f"  - '{log_dir}'에서 'messages', 'syslog', 'dmesg' 파일을 찾을 수 없어 로그 분석을 건너뜁니다."))
             return {}
         logging.info(f"  - 스마트 로그 분석 대상 파일: {[f.name for f in log_files_to_process]}")
 
-        # [Expert Fix] log_patterns.yaml에 정의된 패턴을 추적하기 위한 Set
         known_patterns = set()
 
-        # [BUG FIX] 로그 파일 처리 로직을 try-except 블록 밖으로 이동하여 변수 범위 문제를 해결합니다.
+        # [로그 파일 처리 루프]
         for log_file in log_files_to_process:
             if any(log_file.name.endswith(ext) for ext in ['.gz', '.xz', '.bz2', 'lastlog', 'wtmp', 'btmp']):
                 continue
             
             try:
-                # [Expert Fix] 대용량 파일 처리를 위해 줄 단위로 읽기 (Generator)
                 with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
                     for line in f:
                         line = line.strip()
                         if not line: continue
                         
+                        # [신규] 무시할 패턴인지 먼저 확인
+                        should_ignore = False
+                        for ignore_regex in PATTERNS_TO_IGNORE:
+                            if ignore_regex.search(line):
+                                should_ignore = True
+                                break
+                        if should_ignore:
+                            continue # 다음 라인으로 건너뜀
+
                         normalized_pattern = line
-                        is_matched_by_yaml = False # [Expert Fix] YAML 패턴 매칭 여부
+                        is_matched_by_yaml = False 
 
                         for name, regex, placeholder in PATTERNS_TO_NORMALIZE:
                             new_pattern, num_subs = regex.subn(placeholder, normalized_pattern)
                             if num_subs > 0:
                                 normalized_pattern = new_pattern
-                                is_matched_by_yaml = True # 매칭됨
+                                is_matched_by_yaml = True 
 
                         final_pattern = re.sub(r'\s+', ' ', normalized_pattern).strip()
-                        
-                        # dmesg 로그는 'dmesg'라는 가상 파일명으로 통일하여 처리
                         filename_key = 'dmesg' if 'dmesg' in log_file.name else log_file.name
                         pattern_key = (filename_key, final_pattern)
                         
                         all_patterns[pattern_key] += 1
-                        
-                        if is_matched_by_yaml:
-                            known_patterns.add(pattern_key) # [Expert Fix] YAML 매칭된 패턴 등록
-
-                        if pattern_key not in pattern_examples:
-                            pattern_examples[pattern_key] = line
+                        if is_matched_by_yaml: known_patterns.add(pattern_key)
+                        if pattern_key not in pattern_examples: pattern_examples[pattern_key] = line
             except Exception as e:
                 logging.warning(f"  - 로그 파일 '{log_file.name}' 처리 중 오류 발생: {e}")
 
-        # 2. 빈도수 기반으로 유의미한 로그 필터링
+        # 2. [중요] 심각도(Severity) 정의 - 근본 원인 탐지용
+        # 점수가 높을수록 리스트 상단에 배치됩니다.
+        
+        # Level 1: 치명적 오류 (Kernel Panic, FS Error, HA Fencing 등) - 점수: 100
+        CRITICAL_KEYWORDS = re.compile(
+            r'\b(panic|deadlock|oom-killer|out of memory|segmentation fault|segfault|'
+            r'corruption|corrupt|unrecoverable|hardware error|mce|critical|fatal|emerg|alert|'
+            r'xfs_.*shutdown|remounting filesystem read-only|input/output error|i/o error|'
+            r'fencing|fenced|split-brain|quorum lost|stonith)\b', re.IGNORECASE)
+
+        # Level 2: 주요 오류 및 실패 (Failed, Error, Timeout) - 점수: 50
+        HIGH_KEYWORDS = re.compile(
+            r'\b(error|fail|failed|failure|timeout|timed out|timed-out|refused|denied|blocked|'
+            r'dump|abort|aborted|shutting down|stopping|unavailable|unreachable|lost|offline)\b', re.IGNORECASE)
+
+        # Level 3: 경고 및 알림 (Warning) - 점수: 10
+        MEDIUM_KEYWORDS = re.compile(
+            r'\b(warning|warn|info|notice|link.*down)\b', re.IGNORECASE)
+
         smart_log_analysis = {}
-        ANOMALY_THRESHOLD = 5
-        # [사용자 요청] 과도하게 반복되는 로그를 제외하기 위한 임계값
-        HIGH_FREQUENCY_THRESHOLD = 1000
-
-        # [사용자 요청] LLM에 전달할 최종 데이터의 최대 크기 (바이트 단위, 예: 1MB)
-        MAX_SMART_LOG_SIZE_BYTES = 1 * 1024 * 1024
-        # [사용자 요청] 각 로그 예시의 최대 길이 (문자 단위)
-        MAX_EXAMPLE_LENGTH = 500
-        # [사용자 요청] 선정된 로그 유형별 카운터를 추가합니다.
-        rare_log_count = 0
         keyword_log_count = 0
-        selected_patterns = set() # 중복 계산 방지
-
-        # [Expert Fix] log_patterns.yaml에 정의된 모든 에러 유형을 커버하도록 키워드 대폭 강화 (Fallback용)
-        CORE_KEYWORDS = re.compile(
-            # [BUG FIX] 여러 줄의 문자열을 괄호로 묶어 하나의 문자열로 합칩니다.
-            # 각 줄 끝에 쉼표가 누락되어 발생하던 'unterminated subpattern' 오류를 해결합니다.
-            (r'\b(error|failed|failure|critical|panic|denied|segfault|corrupt|unrecoverable|'
-             r'stonith|fencing|fence|split-brain|standby|primary|secondary|sync|failover|quorum|unfenced|inconsistent|'
-             r'i/o error|out of memory|oom-killer|hung|deadlock|'
-             r'lost|OFFLINE|Quorum lost|link.*DOWN|'  # 기존 키워드
-             r'abort|aborted|warning|warn|timeout|timed-out|full|dropping|rejecting|' # [추가 1] 일반적인 경고/중단
-             r'oops|bug|unable|read-only|ro|offline|blocked|disabled)\b'), # [추가 2] 커널/FS/장치 관련 핵심 키워드
-            re.IGNORECASE)
+        selected_patterns = set()
 
         for (filename, pattern), count in all_patterns.items():
             pattern_key = (filename, pattern)
             
-            # [Expert Fix] 통합 필터링 로직: 키워드가 있거나(OR) YAML에 정의된 패턴이면 무조건 수집
-            is_significant_keyword = CORE_KEYWORDS.search(pattern)
+            # 심각도 점수 계산
+            severity_score = 0
+            if CRITICAL_KEYWORDS.search(pattern):
+                severity_score = 100
+            elif HIGH_KEYWORDS.search(pattern):
+                severity_score = 50
+            elif MEDIUM_KEYWORDS.search(pattern):
+                severity_score = 10
+            
             is_defined_in_yaml = pattern_key in known_patterns
-
-            if is_significant_keyword or is_defined_in_yaml:
-                # [사용자 요청] 핵심 키워드를 포함하는 로그만 카운트하도록 로직 변경
+            
+            # YAML 패턴이거나 키워드가 매칭되면 수집 (점수가 0이어도 YAML 패턴이면 수집)
+            if severity_score > 0 or is_defined_in_yaml:
                 if pattern_key not in selected_patterns:
                     keyword_log_count += 1
                     selected_patterns.add(pattern_key)
@@ -721,17 +732,16 @@ class SosreportParser:
                 smart_log_analysis[filename].append({
                     "pattern": pattern,
                     "count": count,
-                    # [문제 해결] AI가 분석의 근거가 되는 로그를 참조할 수 있도록 'example' 필드를 다시 활성화합니다.
-                    "example": pattern_examples[pattern_key][:MAX_EXAMPLE_LENGTH]
+                    "example": pattern_examples[pattern_key][:500],
+                    "score": severity_score # 정렬을 위한 점수 저장
                 })
 
-        # 파일별로 count 기준으로 정렬
+        # 3. [핵심 수정] 정렬 로직 변경: (심각도 점수 내림차순) -> (빈도수 내림차순)
+        # 이제 1번 발생한 'Kernel Panic'이 1000번 발생한 'Link Down'보다 상위에 위치합니다.
         for filename in smart_log_analysis:
-            smart_log_analysis[filename].sort(key=lambda x: x['count'], reverse=True)
+            smart_log_analysis[filename].sort(key=lambda x: (x['score'], x['count']), reverse=True)
 
-        total_selected = keyword_log_count
-
-        logging.info(Color.info(f"스마트 로그 분석 완료. 총 {total_selected}개의 중요 로그 패턴을 추출했습니다."))
+        logging.info(Color.info(f"스마트 로그 분석 완료. 총 {keyword_log_count}개의 중요 로그 패턴을 추출하고 심각도 순으로 정렬했습니다."))
 
         return {"smart_log_analysis": smart_log_analysis}
 
