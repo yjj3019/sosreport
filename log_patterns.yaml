@@ -1,153 +1,4 @@
 - ignorecase: true
-  name: Error Code
-  placeholder: error <CODE>
-  regex: error\s*=?\s*-?\d+
-- ignorecase: true
-  name: Exit Code or Status
-  placeholder: <TYPE> <CODE>
-  regex: (exit|status)\s*=?\s*\d+
-- ignorecase: true
-  name: Signal Number
-  placeholder: signal <NUM>
-  regex: signal\s+\d+
-- name: Pacemaker Pengine PID
-  placeholder: pengine-<PID>
-  regex: pengine-[0-9]+
-- name: Pacemaker CIB PID
-  placeholder: cib-<PID>
-  regex: cib-[0-9]+
-- name: Pacemaker CRMD PID
-  placeholder: crmd-<PID>
-  regex: crmd-[0-9]+
-- name: Pacemaker Schedulerd PID
-  placeholder: pacemaker-schedulerd[<PID>]
-  regex: pacemaker-schedulerd\[\d+\]
-- name: Pacemaker Controld PID
-  placeholder: pacemaker-controld[<PID>]
-  regex: pacemaker-controld\[\d+\]
-- name: Pacemaker Execd PID
-  placeholder: pacemaker-execd[<PID>]
-  regex: pacemaker-execd\[\d+\]
-- name: Pacemaker Stonith PID
-  placeholder: stonith-ng-<PID>
-  regex: stonith-ng-[0-9]+
-- name: DRBD Resource/Volume/Device
-  placeholder: drbd <RESOURCE>/<VOL> <DEVICE>
-  regex: drbd\s+[\w_]+/\d+\s+drbd\d+
-- name: DRBD Resource
-  placeholder: 'drbd <RESOURCE>:'
-  regex: 'drbd\s+[\w_]+:'
-- name: DRBD Resource Peer Host
-  placeholder: 'drbd <RESOURCE> <PEER_HOST>:'
-  regex: 'drbd\s+[\w_]+\s+[\w\d_]+:'
-- name: DRBD Connection State
-  placeholder: conn(<STATE> -> <STATE>)
-  regex: conn\(\s*[\w\s]+->\s*[\w\s]+\s*\)
-- name: DRBD Disk State
-  placeholder: disk(<STATE> -> <STATE>)
-  regex: disk\(\s*[\w\s]+->\s*[\w\s]+\s*\)
-- name: DRBD Peer State
-  placeholder: peer(<STATE> -> <STATE>)
-  regex: peer\(\s*[\w\s]+->\s*[\w\s]+\s*\)
-- name: DRBD Peer Disk State
-  placeholder: pdsk(<STATE> -> <STATE>)
-  regex: pdsk\(\s*[\w\s]+->\s*[\w\s]+\s*\)
-- name: DRBD Replication State
-  placeholder: repl(<STATE> -> <STATE>)
-  regex: repl\(\s*[\w\s]+->\s*[\w\s]+\s*\)
-- name: DRBD Role State
-  placeholder: role(<STATE> -> <STATE>)
-  regex: role\(\s*[\w\s]+->\s*[\w\s]+\s*\)
-- name: DRBD State Change ID
-  placeholder: state change <ID>
-  regex: state change\s+\d+
-- name: DRBD Sector Number
-  placeholder: sector <SECTOR_NUM>
-  regex: sector\s+\d+
-- name: SBD iSCSI Device Path
-  placeholder: <SBD_ISCSI_DEVICE_PATH>
-  regex: /dev/disk/by-path/ip-[\d.]+:[\d]+-iscsi-[\w.:-]+
-- name: Kernel SCSI Address
-  placeholder: scsi(<HOST>:<CHANNEL>:<TARGET>)
-  regex: scsi\(\d+:\d+:\d+\)
-- name: FC Remote Port
-  placeholder: rport-<RPORT_ID>
-  regex: rport-\d+:\d+-\d+
-- name: World Wide Port Name (WWPN)
-  placeholder: WWPN <WWPN_ADDRESS>
-  regex: WWPN\s+([0-9a-fA-F]{2}:){7}[0-9a-fA-F]{2}
-- name: FC NPort ID
-  placeholder: NPort <NPORT_ID>
-  regex: NPort\s+x[0-9a-fA-F]+
-- name: FC Link Event Data
-  placeholder: Link <STATUS> Event <EVENT_DATA>
-  regex: Link (Up|Down) Event\s+x[0-9a-fA-F]+\s+received Data:(\s+x[0-9a-fA-F]+)+
-- name: QLogic Abort Command Info
-  placeholder: Abort command issued -- <ABORT_INFO>
-  regex: Abort command issued --\s+\d+\s+[0-9a-fA-F]+\s+\d+
-- name: QLogic Completion Handle
-  placeholder: Invalid completion handle (<HANDLE>) -- timed-out
-  regex: Invalid completion handle\s+\([0-9a-fA-F]+\)\s+--\s+timed-out
-- name: NIC Link Speed
-  placeholder: <LINK_SPEED>
-  regex: \b\d+\s+Gbps\b
-- name: XFS Device Name
-  placeholder: 'XFS (<DEVICE>):'
-  regex: 'XFS\s+\([\w-]+(?:\d+)?\):'
-- name: XFS Source File and Line
-  placeholder: line <LINE_NUM> of file <SOURCE_FILE>
-  regex: line\s+\d+\s+of\s+file\s+[\w/.]+\.c
-- name: XFS Caller Function
-  placeholder: Caller <FUNCTION> [xfs]
-  regex: Caller\s+[\w+./]+\[xfs\]
-- name: XFS Shutdown Code
-  placeholder: xfs_do_force_shutdown(<SHUTDOWN_CODE>)
-  regex: xfs_do_force_shutdown\(0x[0-9a-fA-F]+\)
-- name: XFS LSN Value
-  placeholder: LSN (<LSN_VALUE>)
-  regex: LSN\s+\(-?\d+:\d+\)
-- name: Block Device Operation
-  placeholder: dev <DEVICE>, sector <SECTOR_NUM> op <OP_CODE>:(<OPERATION>)
-  regex: dev\s+[\w-]+, sector\s+\d+\s+op\s+0x[0-9a-fA-F]+:\([\w]+\)
-- name: Kernel Tainted State
-  placeholder: 'Tainted: <TAINT_STATE>'
-  regex: Tainted:\s+[P\sOE-]+\s+[\d.-]+
-- ignorecase: true
-  name: DRBD Node State Change
-  placeholder: 'drbd <RESOURCE> <NODE>:'
-  regex: 'drbd\s+[\w_]+\s+node-[\d]+:'
-- ignorecase: true
-  name: DRBD Peer State Change
-  placeholder: peer(<STATE> -> Unknown)
-  regex: peer\(\s*[\w\s]+->\s*Unknown\s*\)
-- ignorecase: true
-  name: DRBD Module Verification Failed
-  placeholder: 'module verification failed: <REASON> - tainting kernel'
-  regex: 'module verification failed: signature and/or required key missing - tainting
-    kernel'
-- ignorecase: true
-  name: DRBD State Change Failed
-  placeholder: 'State change failed: <REASON>'
-  regex: 'State change failed: Can not disconnect a StandAlone device'
-- ignorecase: true
-  name: SBD Scheduler Policy Error
-  placeholder: 'sbd_make_realtime: Unable to set scheduler policy to <POLICY> priority
-    <PRIORITY>'
-  regex: 'sbd_make_realtime: Unable to set scheduler policy to \w+ priority \d+'
-- ignorecase: true
-  name: Pacemaker Operation Error
-  placeholder: Operation '<OP>' [<OP_ID>] (call <CALL_ID> from <PROCESS>) targeting
-    <NODE> using <DEVICE> returned <ERROR_CODE>
-  regex: Operation '[\w_]+'\s+\[\d+\]\s+\(call \d+ from [\w.-]+\.\d+\)\s+targeting\s+[\w.-]+\s+using\s+[\w.-]+\s+returned\s+-\d+
-- ignorecase: true
-  name: Fence SBD Initialization Error
-  placeholder: is not initialized
-  regex: is not initialized$
-- ignorecase: true
-  name: Fence SBD Error Output
-  placeholder: 'error output [ <TIMESTAMP> ERROR: Connection timed out ]'
-  regex: error output\s+\[\s*[\d\s,:-]+ERROR:\s*Connection timed out\s*\]
-- ignorecase: true
   name: Kernel Panic
   placeholder: 'Kernel panic - not syncing: <PANIC_MESSAGE>'
   regex: 'Kernel panic - not syncing: .+'
@@ -160,29 +11,13 @@
   placeholder: 'BUG: unable to handle kernel NULL pointer dereference'
   regex: 'BUG: unable to handle kernel NULL pointer dereference'
 - ignorecase: true
-  name: Generic I/O Error
-  placeholder: I/O error, dev <DEVICE>, sector <SECTOR_NUM>
-  regex: I/O error, dev [\w-]+, sector \d+
+  name: Kernel Bug
+  placeholder: kernel BUG at
+  regex: kernel BUG at
 - ignorecase: true
-  name: Filesystem Remounted Read-only
-  placeholder: Remounting filesystem read-only
-  regex: Remounting filesystem read-only
-- ignorecase: true
-  name: Rejecting I/O to Offline Device
-  placeholder: rejecting I/O to offline device
-  regex: rejecting I/O to offline device
-- ignorecase: true
-  name: Network Link Status
-  placeholder: link is <STATUS>
-  regex: link is (DOWN|UP)
-- ignorecase: true
-  name: Netfilter Connection Tracking Table Full
-  placeholder: 'nf_conntrack: table full, dropping packet'
-  regex: 'nf_conntrack: table full, dropping packet'
-- ignorecase: true
-  name: AVC SELinux Denial
-  placeholder: 'avc: denied { <SELINUX_CONTEXT> }'
-  regex: avc:\s*denied\s*\{[^}]+\}
+  name: Out of Memory (OOM) Killer
+  placeholder: <OOM_EVENT>
+  regex: '(Out of memory: Kill process|oom-killer)'
 - ignorecase: true
   name: Machine Check Error (MCE)
   placeholder: 'MCE: [Hardware Error]'
@@ -192,88 +27,179 @@
   placeholder: EDAC <DEVICE> correctable errors
   regex: EDAC .* correctable errors
 - ignorecase: true
-  name: Out of Memory (OOM) Killer
-  placeholder: <OOM_EVENT>
-  regex: '(Out of memory: Kill process|oom-killer)'
+  name: CPU Soft Lockup
+  placeholder: 'BUG: soft lockup - CPU#<CPU_ID> stuck for <TIME>s!'
+  regex: 'BUG: soft lockup - CPU#\d+ stuck for \d+s!'
+- ignorecase: true
+  name: CPU Hard Lockup
+  placeholder: 'Watchdog: BUG: soft lockup - CPU#<CPU_ID> stuck for <TIME>s!'
+  regex: 'Watchdog: BUG: soft lockup - CPU#\d+ stuck for \d+s!'
 - ignorecase: true
   name: EXT4 Filesystem Error
   placeholder: 'EXT4-fs error (device <DEVICE>):'
   regex: 'EXT4-fs error\s+\(device\s+[\w-]+\):'
 - ignorecase: true
-  name: EXT4 Filesystem Info
-  placeholder: 'EXT4-fs (device <DEVICE>):'
-  regex: 'EXT4-fs\s+\(device\s+[\w-]+\):'
+  name: XFS Shutdown Code
+  placeholder: xfs_do_force_shutdown(<SHUTDOWN_CODE>)
+  regex: xfs_do_force_shutdown\(0x[0-9a-fA-F]+\)
+- ignorecase: true
+  name: XFS I/O Error
+  placeholder: 'XFS (<DEVICE>): I/O Error Detected'
+  regex: 'XFS \([\w-]+\): I/O Error Detected'
 - ignorecase: true
   name: JBD2 Journal Error
   placeholder: 'JBD2: Aborting journal on device <DEVICE_INFO>'
   regex: 'JBD2: Aborting journal on device .+'
 - ignorecase: true
-  name: Kernel SCSI Device Error
-  placeholder: 'sd <SCSI_ADDR>: [<DEVICE>] FAILED'
-  regex: sd\s+\d+:\d+:\d+:\d+:\s+\[\w+\]\s+FAILED
-- ignorecase: true
-  name: Kernel Bug
-  placeholder: kernel BUG at
-  regex: kernel BUG at
-- ignorecase: true
   name: Journal Aborted
   placeholder: <JOURNAL_ABORTED>
   regex: Journal has aborted|ext3_abort called
 - ignorecase: true
-  name: Link Down Event
-  placeholder: <LINK_DOWN_EVENT>
-  regex: Link Down Event|Link down Timeout|LOOP DEAD detected
+  name: Filesystem Remounted Read-only
+  placeholder: Remounting filesystem read-only
+  regex: Remounting filesystem read-only
+- ignorecase: true
+  name: Generic I/O Error
+  placeholder: I/O error, dev <DEVICE>, sector <SECTOR_NUM>
+  regex: I/O error, dev [\w-]+, sector \d+
+- ignorecase: true
+  name: Rejecting I/O to Offline Device
+  placeholder: rejecting I/O to offline device
+  regex: rejecting I/O to offline device
+- ignorecase: true
+  name: Kernel SCSI Device Error
+  placeholder: 'sd <SCSI_ADDR>: [<DEVICE>] FAILED'
+  regex: sd\s+\d+:\d+:\d+:\d+:\s+\[\w+\]\s+FAILED
 - ignorecase: true
   name: Logical Unit Communication Error
   placeholder: Logical unit communication <ERROR_TYPE>
   regex: Logical unit communication (CRC error|failure|parity error|time-out)
 - ignorecase: true
-  name: Megaraid Driver Error
-  placeholder: 'megaraid: <DRIVER_ERROR>'
-  regex: 'megaraid: .*(fail|error|could not|Couldn''t|not supported|invalid|critical)'
+  name: Multipath Path Failed
+  placeholder: 'multipathd: <PATH_DEV>: path failed'
+  regex: 'multipathd: [\w-]+: path failed'
 - ignorecase: true
-  name: MPT Driver Error
-  placeholder: 'mpt-driver: <DRIVER_ERROR>'
-  regex: mpt(base|ctl|lan|scsih)(\*|:|\s).*(ERROR|WARNING|Timeout|Unable|Failed|Can't|bad
-    VooDoo|No can do)
+  name: Corosync KNET Link Down
+  placeholder: '[KNET] link: host: <HOST_ID> link: <LINK_ID> is down'
+  regex: '\[KNET\s+\] link: host: \d+ link: \d+ is down'
 - ignorecase: true
-  name: CCISS Driver Error
-  placeholder: 'cciss: <DRIVER_ERROR>'
-  regex: cciss\*(.+(error|fail|disable|ignore|exceeded|out of memory)).*
+  name: Corosync KNET No Active Links
+  placeholder: '[KNET] host: host: <HOST_ID> has no active links'
+  regex: '\[KNET\s+\] host: host: \d+ has no active links'
 - ignorecase: true
-  name: EXT3 Filesystem Error
-  placeholder: 'EXT3-fs: <FILESYSTEM_ERROR>'
-  regex: EXT3-fs.*(warning|corrupted|failed|bad superblock|cannot|couldn't|not enough
-    memory|unsupported)
+  name: Corosync QDevice Echo Fail
+  placeholder: Server didn't send echo reply message on time
+  regex: Server didn't send echo reply message on time
 - ignorecase: true
-  name: Memory Allocation Error
-  placeholder: <MEMORY_ALLOC_ERROR>
-  regex: Memory Allocation failed|kmalloc error|out of memory|memory not available
+  name: Corosync QDevice Connect Timeout
+  placeholder: Connect timeout
+  regex: ^Connect timeout$
 - ignorecase: true
-  name: DRBD Split-Brain Auto-Recover
-  placeholder: <DRBD_SPLIT_BRAIN_AUTO_RECOVER>
-  regex: uuid_compare\(\)=split-brain-auto-recover by rule=
+  name: Corosync Totem Token Lost
+  placeholder: '[TOTEM] Token has not been received in <MS> ms'
+  regex: \[TOTEM\s*\] Token has not been received in \d+ ms
 - ignorecase: true
-  name: DRBD Helper Command Initial Split-Brain
-  placeholder: <DRBD_HELPER_INITIAL_SPLIT_BRAIN>
-  regex: 'helper command: /sbin/drbdadm initial-split-brain'
+  name: Corosync Totem Processor Failed
+  placeholder: '[TOTEM] A processor failed, forming new configuration'
+  regex: \[TOTEM\s*\] A processor failed, forming new configuration
 - ignorecase: true
-  name: DRBD Helper Command Initial Split-Brain Exit Code
-  placeholder: <DRBD_HELPER_INITIAL_SPLIT_BRAIN_EXIT>
-  regex: 'helper command: /sbin/drbdadm initial-split-brain exit code \d+'
+  name: Corosync Totem Token Timeout
+  placeholder: token timed out (<MS>ms)
+  regex: token timed out \(\d+ms\)
+- ignorecase: true
+  name: Corosync Totem Failed Leave
+  placeholder: '[TOTEM] Failed to receive the leave message'
+  regex: \[TOTEM\s*\] Failed to receive the leave message
+- ignorecase: true
+  name: Pacemaker Quorum Lost
+  placeholder: 'warning: Quorum lost'
+  regex: 'warning: Quorum lost'
+- ignorecase: true
+  name: Pacemaker Node Lost
+  placeholder: 'notice: Node <NODE_NAME> state is now lost'
+  regex: 'notice: Node [\w.-]+ state is now lost'
+- ignorecase: true
+  name: Pacemaker Unexpected Shutdown
+  placeholder: 'warning: Stonith/shutdown of node <NODE_NAME> was not expected'
+  regex: 'warning: Stonith/shutdown of node [\w.-]+ was not expected'
+- ignorecase: true
+  name: Corosync Quorum Non-Primary
+  placeholder: '[QUORUM] This node is within the non-primary component'
+  regex: \[QUORUM\] This node is within the non-primary component
+- ignorecase: true
+  name: Pacemaker SBD Panic
+  placeholder: 'emerg: Signaling sbd[<PID>] to panic'
+  regex: 'emerg: Signaling sbd\[\d+\] to panic'
+- ignorecase: true
+  name: Pacemaker SBD Panic Failed
+  placeholder: 'emerg: Cannot signal sbd[<PID>] to terminate: Operation not permitted'
+  regex: 'emerg: Cannot signal sbd\[\d+\] to terminate: Operation not permitted'
+- ignorecase: true
+  name: Pacemaker Parent Panic
+  placeholder: 'emerg: Signaling parent <PID> to panic'
+  regex: 'emerg: Signaling parent \d+ to panic'
+- ignorecase: true
+  name: Pacemakerd Executable Error
+  placeholder: 'error: Could not get executable for PID <PID>: No such file or directory'
+  regex: 'error: Could not get executable for PID \d+: No such file or directory'
+- ignorecase: true
+  name: Fence SBD Error Output
+  placeholder: 'error output [ <TIMESTAMP> ERROR: Connection timed out ]'
+  regex: error output\s+\[\s*[\d\s,:-]+ERROR:\s*Connection timed out\s*\]
+- ignorecase: true
+  name: Pacemaker Operation Error
+  placeholder: Operation '<OP>' [<OP_ID>] (call <CALL_ID> from <PROCESS>) targeting
+    <NODE> using <DEVICE> returned <ERROR_CODE>
+  regex: Operation '[\w_]+'\s+\[\d+\]\s+\(call \d+ from [\w.-]+\.\d+\)\s+targeting\s+[\w.-]+\s+using\s+[\w.-]+\s+returned\s+-\d+
 - ignorecase: true
   name: DRBD Split-Brain Unresolved
   placeholder: <DRBD_SPLIT_BRAIN_UNRESOLVED>
   regex: Split-Brain detected but unresolved, dropping connection!
 - ignorecase: true
-  name: DRBD Helper Command Split-Brain
-  placeholder: <DRBD_HELPER_SPLIT_BRAIN>
-  regex: 'helper command: /sbin/drbdadm split-brain'
+  name: DRBD Connection Lost
+  placeholder: <DRBD_CONNECTION_LOST>
+  regex: Connection lost
 - ignorecase: true
-  name: DRBD Helper Command Split-Brain Exit Code
-  placeholder: <DRBD_HELPER_SPLIT_BRAIN_EXIT>
-  regex: 'helper command: /sbin/drbdadm split-brain exit code \d+'
+  name: DRBD StandAlone
+  placeholder: <DRBD_STANDALONE>
+  regex: StandAlone
 - ignorecase: true
-  name: DRBD Split-Brain Manually Solved
-  placeholder: <DRBD_SPLIT_BRAIN_MANUALLY_SOLVED>
-  regex: Split-Brain detected, manually solved. Sync from this node
+  name: Link Down Event
+  placeholder: <LINK_DOWN_EVENT>
+  regex: Link Down Event|Link down Timeout|LOOP DEAD detected
+- ignorecase: true
+  name: Network Link Down
+  placeholder: link is DOWN
+  regex: link is DOWN
+- ignorecase: true
+  name: Netfilter Connection Tracking Table Full
+  placeholder: 'nf_conntrack: table full, dropping packet'
+  regex: 'nf_conntrack: table full, dropping packet'
+- ignorecase: true
+  name: Critical Error
+  placeholder: <CRITICAL>
+  regex: \bcritical\b
+- ignorecase: true
+  name: Failed Action
+  placeholder: <FAILED>
+  regex: \bfail(ed|ure)?\b
+- ignorecase: true
+  name: Error Code (General)
+  placeholder: error <CODE>
+  regex: \berror\s*=?\s*-?\d+\b
+- ignorecase: true
+  name: Generic Error
+  placeholder: <ERROR>
+  regex: \berror\b
+- ignorecase: true
+  name: Fatal Error
+  placeholder: <FATAL>
+  regex: \bfatal\b
+- ignorecase: true
+  name: Alert
+  placeholder: <ALERT>
+  regex: \balert\b
+- ignorecase: true
+  name: Emergency
+  placeholder: <EMERGENCY>
+  regex: \bemerg\b
