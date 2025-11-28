@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIBox - SOSReport 분석 시스템</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #007aff;
+            --primary-gradient: linear-gradient(45deg, #007aff, #0051a8);
+            --success-color: #34c759;
+            --error-color: #ff3b30;
+            --background-color: #f7f8fc;
+            --surface-color: #ffffff;
+            --text-color: #1a1a1a;
+            --secondary-text-color: #6b7280;
+            --border-color: #e5e7eb;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.04);
+            --header-bg: #1f2937;
+            --header-text: #ffffff;
+        }
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        header {
+            background: var(--header-bg);
+            color: var(--header-text);
+            padding: 16px 24px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        }
+        header h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
+        .status-box { display: flex; align-items: center; gap: 12px; background-color: rgba(255, 255, 255, 0.1); padding: 8px 15px; border-radius: 20px; font-size: 0.9rem; }
+        .status-indicator { width: 10px; height: 10px; border-radius: 50%; transition: background-color 0.3s; }
+        .status-indicator.connected { background-color: var(--success-color); }
+        .status-indicator.disconnected { background-color: var(--error-color); }
+
+        .layout-grid { display: flex; align-items: flex-start; gap: 24px; }
+        .main-column { flex: 1; min-width: 0; }
+        .sidebar-column { flex-basis: 340px; position: sticky; top: 24px; }
+        .full-width-panel { margin-top: 24px; }
+        
+        @media (max-width: 960px) {
+            .layout-grid { flex-direction: column; }
+            .sidebar-column { position: static; width: 100%; flex-basis: auto; }
+        }
+
+        .panel {
+            background-color: var(--surface-color);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+        }
+        .panel h2 { margin-top: 0; margin-bottom: 20px; font-size: 1.25rem; font-weight: 600; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; display:flex; align-items:center; gap: 10px;}
+
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            background-color: #fafbff;
+        }
+        .upload-area:hover, .upload-area.dragover { background-color: #f5f8ff; border-color: var(--primary-color); transform: translateY(-2px); }
+        .upload-area .upload-icon { color: var(--primary-color); margin-bottom: 16px; }
+        .upload-area p { margin: 4px 0 0; font-size: 1rem; color: var(--text-color); font-weight: 500;}
+        #file-input { display: none; }
+        
+        .file-display { display: none; margin-top: 20px; }
+        .file-info { display: flex; align-items: center; gap: 12px; background-color: #f7f8fc; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); }
+        .file-info .file-icon { color: var(--secondary-text-color); }
+        .file-info span { font-weight: 500; word-break: break-all; }
+        
+        .progress-container { margin-top: 16px; }
+        .progress-bar { width: 100%; background-color: #e5e7eb; border-radius: 20px; overflow: hidden; height: 8px; }
+        .progress-bar-inner { height: 100%; width: 0%; background: var(--primary-gradient); transition: width 0.4s ease; border-radius: 20px; }
+        .progress-status { display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.875rem; color: var(--secondary-text-color); }
+        
+        .btn {
+            background: var(--primary-gradient); color: white; border: none; padding: 12px 25px;
+            border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;
+            display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 20px;
+            box-shadow: 0 4px 14px 0 rgba(0, 118, 255, 0.39);
+        }
+        .btn:disabled { background: #94d3a2; cursor: not-allowed; opacity: 0.7; box-shadow: none; }
+        .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px 0 rgba(0, 118, 255, 0.45); }
+
+        .stepper { list-style: none; padding: 0; margin: 0; }
+        .step { display: flex; align-items: center; gap: 16px; padding: 14px 4px; }
+        .step:not(:last-child) { border-bottom: 1px solid var(--border-color); }
+        .step-icon {
+            width: 36px; height: 36px; border-radius: 50%; background-color: #f3f4f6; color: var(--secondary-text-color);
+            display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; flex-shrink: 0;
+        }
+        .step-label { font-weight: 500; color: var(--secondary-text-color); transition: color 0.3s ease; }
+        .step.active .step-icon { background-color: var(--primary-color); color: white; }
+        .step.active .step-label { color: var(--text-color); font-weight: 600; }
+        .step.completed .step-icon { background-color: var(--success-color); color: white; }
+        .step.completed .step-label { color: var(--text-color); }
+        .step.error .step-icon { background-color: var(--error-color); color: white; }
+        .step.error .step-label { color: var(--error-color); font-weight: 600; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .step.active .step-icon svg { animation: spin 1.2s linear infinite; }
+
+        .report-list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        #delete-all-btn { background-color: transparent; color: var(--error-color); border: 1px solid #ffdede; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s; }
+        #delete-all-btn:hover { background-color: var(--error-color); color: white; }
+        
+        .report-list ul { list-style: none; padding: 0; margin: 0; }
+        /* [디자인 개선] 리포트 목록을 테이블 형식으로 변경하여 가독성 향상 */
+        .report-table { width: 100%; border-collapse: collapse; }
+        .report-table th, .report-table td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .report-table th { font-weight: 600; font-size: 0.85rem; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: 0.5px; }
+        .report-table tbody tr:hover { background-color: #f5f8ff; }
+        .report-table a {
+            text-decoration: none; color: var(--text-color); font-weight: 500;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .report-table a:hover { color: var(--primary-color); }
+        .report-table .file-icon { color: var(--primary-color); flex-shrink: 0; }
+        .report-table .report-meta { font-size: 0.85rem; color: var(--secondary-text-color); }
+        .report-table .actions { text-align: right; }
+
+        
+        .delete-btn {
+            background-color: transparent; color: var(--secondary-text-color); border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; margin-left: 16px;
+        }
+        .delete-btn:hover { background-color: #ffeded; color: var(--error-color); }
+    </style>
+</head>
+<body>
+    <!-- [보안 강화] 비밀번호 입력을 위한 모달 창 추가 -->
+    <div id="password-modal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.5); justify-content:center; align-items:center;">
+        <div style="background:white; padding:2rem; border-radius:8px; box-shadow:0 5px 15px rgba(0,0,0,0.3); width:350px;">
+            <h3 style="margin-top:0;">관리자 비밀번호 확인</h3>
+            <p style="color:#666; font-size:0.9rem;">모든 리포트를 삭제하려면 비밀번호를 입력하세요.</p>
+            <input type="password" id="password-input-modal" style="width:100%; padding:10px; margin:1rem 0; border:1px solid #ccc; border-radius:4px;">
+            <div style="display:flex; justify-content:flex-end; gap:1rem;">
+                <button id="cancel-delete-btn" class="btn" style="background: var(--secondary-text-color); width: auto; margin-top: 0;">취소</button>
+                <button id="confirm-delete-btn" class="btn" style="background: var(--error-color); width: auto; margin-top: 0;">삭제 확인</button>
+            </div>
+        </div>
+    </div>
+<body>
+    <header>
+        <h1>AIBox SOSReport 분석</h1>
+        <div class="status-box">
+            <div id="connection-status-indicator" class="status-indicator disconnected"></div>
+            <span id="connection-status">연결 확인 중...</span>
+            <span style="color: #4a5568;">|</span>
+            <span id="model-name">N/A</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="layout-grid">
+            <div class="main-column">
+                <div class="panel">
+                     <h2>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        파일 업로드
+                    </h2>
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-icon">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="12" y2="12"></line><line x1="15" y1="15" x2="12" y2="12"></line></svg>
+                        </div>
+                        <p>분석할 sosreport 파일을 여기에 드래그하세요.</p>
+                        <p style="font-size: 0.9rem; color: var(--secondary-text-color);">또는 클릭하여 파일 선택</p>
+                        <input type="file" id="file-input" accept=".tar.gz, .tgz, .tar.xz, .txz, .tar.bz2, .tbz2">
+                    </div>
+
+                    <div class="file-display" id="file-display">
+                        <div class="file-info">
+                             <span class="file-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                             </span>
+                            <span id="file-name"></span>
+                        </div>
+                        <div class="progress-container">
+                            <div class="progress-bar"><div class="progress-bar-inner" id="progress-bar-inner"></div></div>
+                            <div class="progress-status">
+                                 <span id="progress-text">업로드 대기 중</span>
+                                 <span id="timer-display"></span>
+                            </div>
+                        </div>
+                        <button class="btn" id="upload-button">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                            분석 시작
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-column">
+                <div class="panel">
+                    <h2>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
+                        분석 진행 현황
+                    </h2>
+                    <ul class="stepper" id="analysis-stepper">
+                        <li class="step" data-step="1">
+                            <div class="step-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></div>
+                            <div class="step-label">파일 업로드 및 압축 해제</div>
+                        </li>
+                        <li class="step" data-step="2">
+                            <div class="step-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></div>
+                            <div class="step-label">시스템 데이터 파싱</div>
+                        </li>
+                        <li class="step" data-step="3">
+                            <div class="step-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h20M2 6h20M2 18h20"></path></svg></div>
+                            <div class="step-label">SAR 성능 데이터 파싱</div>
+                        </li>
+                        <li class="step" data-step="4">
+                            <div class="step-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><path d="M16 4h-4v4"></path><path d="M12 14v2"></path><path d="M12 20v-2"></path><rect x="4" y="14" width="16" height="6" rx="2"></rect><path d="M4 14H2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4h-2"></path></svg></div>
+                            <div class="step-label">AI 및 규칙 기반 종합 분석</div>
+                        </li>
+                        <li class="step" data-step="5">
+                            <div class="step-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></div>
+                            <div class="step-label">리포트 생성</div>
+                        </li>
+                    </ul>
+                </div>
+                <!-- [사용자 요청] 상세 오류 로그를 보여주기 위한 모달 -->
+                <div id="error-log-modal" class="modal" style="display: none;">
+                    <div class="modal-content">
+                        <pre id="error-log-content"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="panel full-width-panel">
+            <div class="report-list-header">
+                <h2>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                    분석 리포트
+                </h2>
+                <button id="delete-all-btn" onclick="deleteAllReports()">전체 삭제</button>
+            </div>
+            <div class="report-list" id="report-list">
+                <!-- [디자인 개선] 리포트 목록을 테이블로 변경 -->
+                <table class="report-table">
+                    <thead>
+                        <tr><th>리포트 이름</th><th>생성 시각</th><th>소요 시간</th><th class="actions">작업</th></tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE_PATH = '/AIBox';
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const fileDisplay = document.getElementById('file-display');
+        const fileNameEl = document.getElementById('file-name');
+        const progressBarInner = document.getElementById('progress-bar-inner');
+        const progressText = document.getElementById('progress-text');
+        const uploadButton = document.getElementById('upload-button');
+        const reportListTbody = document.getElementById('report-list').querySelector('tbody');
+        const connectionStatusIndicator = document.getElementById('connection-status-indicator');
+        const connectionStatusEl = document.getElementById('connection-status');
+        const modelNameEl = document.getElementById('model-name');
+        const timerDisplay = document.getElementById('timer-display');
+        const analysisStepper = document.getElementById('analysis-stepper');
+        // [보안 강화] 비밀번호 모달 관련 DOM 요소 추가
+        const passwordModal = document.getElementById('password-modal');
+        const passwordInputModal = document.getElementById('password-input-modal');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+
+
+        // [개선] 상태 값들을 상수로 관리하여 코드 가독성 및 유지보수성 향상
+        const STATUS = {
+            QUEUED: 'queued', RUNNING: 'running', EXTRACTING: 'extracting',
+            PARSING_SYSTEM: 'parsing_system', PARSING_SAR: 'parsing_sar',
+            ANALYZING: 'analyzing', GENERATING_GRAPHS: 'generating_graphs',
+            GENERATING_REPORT: 'generating_report', COMPLETE: 'complete', FAILED: 'failed'
+        };
+
+        let analysisTimer;
+        let secondsElapsed = 0;
+        let currentPollingId = null;
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelect);
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); }, false);
+        });
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, () => uploadArea.classList.add('dragover'), false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('dragover'), false);
+        });
+
+        uploadArea.addEventListener('drop', handleDrop, false);
+        uploadButton.addEventListener('click', uploadAndAnalyze);
+
+        function handleFileSelect() {
+            if (fileInput.files.length > 0) displayFileInfo(fileInput.files[0]);
+        }
+        
+        function handleDrop(e) {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                displayFileInfo(files[0]);
+            }
+        }
+
+        function displayFileInfo(file) {
+            fileNameEl.textContent = file.name;
+            fileDisplay.style.display = 'block';
+            uploadButton.disabled = false;
+            resetProgress();
+        }
+
+        function resetProgress() {
+            progressBarInner.style.width = '0%';
+            progressBarInner.style.background = 'var(--primary-gradient)';
+            progressText.textContent = '업로드 대기 중';
+            if(analysisTimer) clearInterval(analysisTimer);
+            if(currentPollingId) clearInterval(currentPollingId);
+            currentPollingId = null;
+            secondsElapsed = 0;
+            timerDisplay.textContent = "";
+            updateStep(0);
+        }
+
+        function updateStep(currentStep, status = 'pending') {
+            const steps = analysisStepper.querySelectorAll('.step');
+            const icons = {
+                default: [
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>`,
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h20M2 6h20M2 18h20"></path></svg>`,
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><path d="M16 4h-4v4"></path><path d="M12 14v2"></path><path d="M12 20v-2"></path><rect x="4" y="14" width="16" height="6" rx="2"></rect><path d="M4 14H2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4h-2"></path></svg>`,
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`,
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
+                ],
+                spinner: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>`,
+                check: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+                error: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`
+            };
+            
+            steps.forEach((step, index) => {
+                const stepNum = index + 1;
+                const iconContainer = step.querySelector('.step-icon');
+                step.classList.remove('active', 'completed', 'error');
+                
+                if (stepNum < currentStep) {
+                    step.classList.add('completed');
+                    iconContainer.innerHTML = icons.check;
+                } else if (stepNum === currentStep) {
+                    step.classList.add(status);
+                    if (status === 'active') {
+                        iconContainer.innerHTML = icons.spinner;
+                    } else if (status === 'error') {
+                        iconContainer.innerHTML = icons.error;
+                    } else {
+                         iconContainer.innerHTML = icons.default[stepNum - 1]; // [BUG FIX] index가 아닌 stepNum을 사용해야 올바른 아이콘을 가져옵니다.
+                    }
+                } else {
+                    iconContainer.innerHTML = icons.default[stepNum - 1]; // [BUG FIX] index가 아닌 stepNum을 사용해야 올바른 아이콘을 가져옵니다.
+                }
+            });
+        }
+
+        // [개선] 분석 상태에 따라 UI를 업데이트하는 로직 강화
+        function uploadAndAnalyze() {
+            const file = fileInput.files[0];
+            if (!file) { alert('파일을 선택해주세요.'); return; }
+
+            uploadButton.disabled = true; // [개선] 분석 시작 시 버튼 비활성화
+            resetProgress();
+            
+            const formData = new FormData();
+            formData.append('sosreportFile', file);
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${API_BASE_PATH}/api/upload`, true);
+
+            xhr.upload.onprogress = e => {
+                if (e.lengthComputable) {
+                    const percent = (e.loaded / e.total) * 100;
+                    progressBarInner.style.width = percent + '%';
+                    progressText.textContent = `업로드 중: ${Math.round(percent)}%`; // [BUG FIX] updateStepUI -> updateStep
+                    updateStep(1, 'active');
+                }
+            };
+            
+            xhr.onload = () => {
+                // [BUG FIX] 서버 응답 처리 로직을 try-catch로 감싸 안정성을 높입니다.
+                // 업로드 완료 후 서버 응답 파싱에 실패하여 진행이 멈추는 현상을 방지합니다.
+                try {
+                    if (xhr.status === 200) {
+                        updateStep(1, 'completed'); // [BUG FIX] updateStepUI -> updateStep
+                        progressText.textContent = '서버에서 분석 준비 중...';
+                        const response = JSON.parse(xhr.responseText);
+                        if (!response.analysis_id) {
+                            throw new Error("서버 응답에서 분석 ID를 찾을 수 없습니다.");
+                        }
+                        checkAnalysisStatus(response.analysis_id);
+                        startTimer();
+                    } else {
+                        // 서버가 200이 아닌 상태 코드를 반환했을 때, 응답 본문을 오류 메시지로 표시합니다.
+                        const errorResponse = xhr.responseText ? JSON.parse(xhr.responseText) : { error: `HTTP 상태 코드: ${xhr.status}` };
+                        throw new Error(errorResponse.error || xhr.statusText);
+                    }
+                } catch (e) {
+                    progressText.textContent = `오류: ${e.message}`;
+                    progressBarInner.style.background = 'var(--error-color)';
+                    uploadButton.disabled = false; // 오류 발생 시 버튼을 다시 활성화합니다.
+                    updateStep(1, 'error'); // [BUG FIX] updateStepUI -> updateStep
+                }
+            };
+
+            // [개선] 업로드 실패 시 명확한 오류 처리
+            xhr.onerror = () => {
+                progressText.textContent = '업로드 중 네트워크 오류 발생';
+                progressBarInner.style.background = 'var(--error-color)';
+                uploadButton.disabled = false;
+                updateStep(1, 'error'); // [BUG FIX] updateStepUI -> updateStep
+            };
+            
+            xhr.send(formData);
+        }
+
+        // [개선] async/await를 사용하여 비동기 로직의 가독성 향상
+        function checkAnalysisStatus(analysisId) {
+            currentPollingId = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE_PATH}/api/status/${analysisId}`);
+                    if (!response.ok) {
+                        if (response.status === 404) return; // 아직 서버에 상태가 등록되지 않음, 재시도
+                        throw new Error(`상태 확인 실패: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    const lastLog = result.log && result.log.length > 0 ? result.log[result.log.length - 1].replace(/<[^>]*>?/gm, '') : '...';
+                    
+                    // [개선] 상태별 메시지를 명확하게 매핑
+                    const statusTextMap = {
+                        [STATUS.QUEUED]: '분석 대기열에 추가...',
+                        [STATUS.RUNNING]: '분석 프로세스 시작...',
+                        [STATUS.EXTRACTING]: 'sosreport 압축 해제 중...',
+                        [STATUS.PARSING_SYSTEM]: '시스템 데이터 파싱 중...',
+                        [STATUS.PARSING_SAR]: 'SAR 성능 데이터 파싱 중...',
+                        [STATUS.ANALYZING]: 'AI 및 규칙 기반 종합 분석 중...',
+                        [STATUS.GENERATING_GRAPHS]: '성능 그래프 생성 중...',
+                        [STATUS.GENERATING_REPORT]: 'HTML 보고서 생성 중...'
+                    };
+                    // [BUG FIX] 서버 로그에서 STATUS: 키워드를 파싱하여 상태를 결정합니다.
+                    // 여러 STATUS 로그가 있을 수 있으므로, 가장 마지막 로그를 기준으로 현재 상태를 판단합니다.
+                    const statusLogs = result.log.filter(log => log.includes('STATUS:'));
+                    const statusLog = statusLogs.length > 0 ? statusLogs[statusLogs.length - 1] : null;
+                    const currentStatus = statusLog ? statusLog.split('STATUS:')[1].trim().toLowerCase() : result.status;
+                    progressText.textContent = statusTextMap[currentStatus] || lastLog;
+                    
+                    // [개선] 상태와 스텝 번호를 명확하게 매핑
+                    const statusMap = {
+                        [STATUS.QUEUED]: 1,
+                        [STATUS.RUNNING]: 1,
+                        [STATUS.EXTRACTING]: 1,
+                        [STATUS.PARSING_SYSTEM]: 2,
+                        [STATUS.PARSING_SAR]: 3,
+                        [STATUS.ANALYZING]: 4,
+                        [STATUS.GENERATING_GRAPHS]: 4,
+                        [STATUS.GENERATING_REPORT]: 5
+                    };
+                    const currentStep = statusMap[currentStatus] || statusMap[result.status] || 0;
+
+                    // [개선] 단계가 진행 중일 때 'active' 상태로 아이콘 및 스타일 업데이트
+                    if (currentStep > 0) {
+                        updateStep(currentStep, 'active'); // [BUG FIX] updateStepUI -> updateStep
+                    }
+
+                    if (result.status === 'complete') {
+                        clearInterval(currentPollingId);
+                        clearInterval(analysisTimer);
+                        updateStep(5, 'completed'); // [BUG FIX] updateStepUI -> updateStep
+                        progressText.textContent = `분석 완료! (총 ${secondsElapsed}초 소요)`;
+                        progressBarInner.style.background = 'var(--success-color)';
+                        progressBarInner.style.width = '100%';
+                        setTimeout(() => {
+                            fetchReports();
+                            resetProgress();
+                            fileInput.value = '';
+                            fileDisplay.style.display = 'none';
+                            uploadButton.disabled = false;
+                        }, 1500);
+                    } else if (result.status === 'failed') {
+                        clearInterval(currentPollingId);
+                        clearInterval(analysisTimer);
+                        const failedStep = currentStep > 0 ? currentStep : 1;
+                        updateStep(failedStep, 'error');
+
+                        // [사용자 요청] 실패 단계와 원인을 명확하게 표시
+                        const failedStepLabel = document.querySelector(`.step[data-step="${failedStep}"] .step-label`).textContent;
+                        const errorLog = result.log.join('\n');
+                        const coreErrorMatch = errorLog.match(/치명적인 오류 발생: (.*)/) || errorLog.match(/error: (.*)/i);
+                        const coreError = coreErrorMatch ? coreErrorMatch[1] : lastLog;
+
+                        progressText.innerHTML = `
+                            <span><strong style="color: var(--error-color);">분석 실패:</strong> ${failedStepLabel} 단계에서 오류가 발생했습니다.</span><br>
+                            <span style="font-size: 0.9em;"><strong>오류 원인:</strong> ${coreError}</span>
+                            <button class="error-details-btn" id="show-error-log">상세 로그 보기</button>
+                        `;
+                        
+                        progressBarInner.style.background = 'var(--error-color)';
+                        uploadButton.disabled = false;
+
+                        document.getElementById('show-error-log').addEventListener('click', () => showErrorLogModal(errorLog));
+                    }
+                } catch (error) {
+                    console.error("상태 확인 중 오류:", error);
+                }
+            }, 2500);
+        }
+
+        async function fetchReports() {
+            try {
+                const response = await fetch(`${API_BASE_PATH}/api/reports`);
+                if (!response.ok) throw new Error('Could not fetch reports list.');
+                const reports = await response.json();
+                
+                reportListTbody.innerHTML = '';
+                if(reports.length === 0) {
+                    reportListTbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--secondary-text-color); padding: 40px;">생성된 리포트가 없습니다.</td></tr>';
+                } else {
+                    reports.forEach(report => {
+                        const tr = document.createElement('tr');
+                        const reportName = report.name;
+                        
+                        // [사용자 요청] 생성 시각 및 소요 시간 표시
+                        const creationDate = report.creation_timestamp ? new Date(report.creation_timestamp * 1000).toLocaleString() : 'N/A';
+                        const duration = report.duration_seconds ? `${Math.round(report.duration_seconds)}초` : 'N/A';
+
+                        tr.innerHTML = `
+                            <td>
+                                <a href="${API_BASE_PATH}/sosreport/output/${reportName}" target="_blank">
+                                   <span class="file-icon">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                                   </span>
+                                    ${reportName}
+                                </a>
+                            </td>
+                            <td class="report-meta">${creationDate}</td>
+                            <td class="report-meta">${duration}</td>
+                            <td class="actions">
+                                <button class="delete-btn" onclick="deleteReport('${reportName}')">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                </button>
+                            </td>
+                        `;
+                        reportListTbody.appendChild(tr);
+                    });
+                }
+            } catch (error) {
+                console.error(error);
+                reportListTbody.innerHTML = '<tr><td colspan="4">리포트 목록을 불러오는 중 오류가 발생했습니다.</td></tr>';
+            }
+        }
+
+        async function deleteReport(filename) {
+            if (!confirm(`'${filename}' 리포트를 정말 삭제하시겠습니까?`)) return;
+            try {
+                const response = await fetch(`${API_BASE_PATH}/api/reports?file=${encodeURIComponent(filename)}`, { method: 'DELETE' });
+                if (!response.ok) { const result = await response.json(); throw new Error(result.error || 'Delete failed'); }
+                fetchReports();
+            } catch (error) { alert(`리포트 삭제 오류: ${error.message}`); }
+        }
+        
+        // [보안 강화] '전체 삭제' 함수를 모달을 사용하도록 수정
+        async function deleteAllReports() {
+            if (confirm('생성된 모든 리포트와 분석 데이터(.json)를 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
+                passwordModal.style.display = 'flex';
+                passwordInputModal.focus();
+            }
+        }
+
+        // [보안 강화] 모달의 '삭제 확인' 버튼 클릭 이벤트 처리
+        confirmDeleteBtn.addEventListener('click', async () => {
+            const password = passwordInputModal.value;
+            if (!password) {
+                alert('비밀번호를 입력해주세요.');
+                return;
+            }
+
+            passwordModal.style.display = 'none';
+            passwordInputModal.value = '';
+
+            try {
+                const response = await fetch(`${API_BASE_PATH}/api/reports/all`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: password })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || '전체 삭제 실패');
+                alert('모든 리포트가 성공적으로 삭제되었습니다.');
+                fetchReports();
+            } catch (error) { alert(`전체 삭제 오류: ${error.message}`); }
+        });
+
+        // [보안 강화] 모달의 '취소' 버튼 클릭 이벤트 처리
+        cancelDeleteBtn.addEventListener('click', () => {
+            passwordModal.style.display = 'none';
+            passwordInputModal.value = '';
+        });
+
+        // [사용자 요청] 상세 오류 로그 모달 표시 함수
+        function showErrorLogModal(logContent) {
+            const modal = document.getElementById('error-log-modal');
+            document.getElementById('error-log-content').textContent = logContent;
+            modal.style.display = 'flex';
+            // 모달 외부 클릭 시 닫기
+            window.onclick = function(event) {
+                if (event.target == modal) modal.style.display = "none";
+            }
+        }
+
+        async function checkServerStatus() {
+            try {
+                const response = await fetch(`${API_BASE_PATH}/api/config`);
+                if (!response.ok) throw new Error('Server status check failed');
+                const config = await response.json();
+                connectionStatusIndicator.className = 'status-indicator connected';
+                connectionStatusEl.textContent = '연결됨';
+                modelNameEl.textContent = config.model || 'N/A';
+            } catch (error) {
+                connectionStatusIndicator.className = 'status-indicator disconnected';
+                connectionStatusEl.textContent = '연결 끊김';
+                modelNameEl.textContent = 'N/A';
+            }
+        }
+
+        function startTimer() {
+            secondsElapsed = 0;
+            timerDisplay.textContent = "0초";
+            analysisTimer = setInterval(() => {
+                secondsElapsed++;
+                timerDisplay.textContent = `${secondsElapsed}초`;
+            }, 1000);
+        }
+
+        function init() {
+            resetProgress();
+            fileDisplay.style.display = 'none';
+            uploadButton.disabled = true;
+            fetchReports();
+            checkServerStatus();
+            setInterval(checkServerStatus, 30000);
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
