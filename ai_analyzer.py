@@ -838,5 +838,3 @@ Example: {{"analysis_report": "특정 조건에서 원격 코드 실행이 가�
                 advisory['fix_version'] = f"{pkg_name}-{fix_version_str}"
         
         return advisories
-
-}
