@@ -10,37 +10,6 @@
   name: Signal Number
   placeholder: signal <NUM>
   regex: signal\s+\d+
-- name: IPv4 Address and Port
-  placeholder: <IP_ADDRESS>
-  regex: \b(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?::\d+)?\b
-- name: Kernel Timestamp
-  placeholder: '[<KNL_TIMESTAMP>]'
-  regex: \[\s*\d+\.\d+\]
-- ignorecase: true
-  name: UUID
-  placeholder: <UUID>
-  regex: \b([a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12})\b
-- name: PID (equals format)
-  placeholder: pid=<PID>
-  regex: pid\s*=\s*\d+
-- name: PID (bracket format)
-  placeholder: '[<PID>]:'
-  regex: '\[\d+\]:'
-- name: Standard Timestamp
-  placeholder: <TIMESTAMP>
-  regex: (\b[A-Za-z]{3}\s+\d{1,2}\s+)?\d{2}:\d{2}:\d{2}
-- name: ISO 8601 Timestamp
-  placeholder: <ISO_TIMESTAMP>
-  regex: \b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?\b
-- name: Hex Address
-  placeholder: <HEX_ADDR>
-  regex: 0x[0-9a-fA-F]+
-- name: Disk Device Name
-  placeholder: <DEVICE>
-  regex: sd[a-z]\d*
-- name: Session ID
-  placeholder: session <SESSION_ID>
-  regex: session\s\d+
 - name: Pacemaker Pengine PID
   placeholder: pengine-<PID>
   regex: pengine-[0-9]+
@@ -62,24 +31,6 @@
 - name: Pacemaker Stonith PID
   placeholder: stonith-ng-<PID>
   regex: stonith-ng-[0-9]+
-- name: Corosync PID
-  placeholder: corosync[<PID>]
-  regex: corosync\[\d+\]
-- name: Pacemakerd PID
-  placeholder: pacemakerd[<PID>]
-  regex: pacemakerd\[\d+\]
-- name: Pacemaker Transition ID
-  placeholder: transition <ID>
-  regex: transition [0-9]+
-- name: Pacemaker Resource ID
-  placeholder: resource <RESOURCE_ID>
-  regex: resource\s+[\w_:]+
-- name: Pacemaker Operation ID
-  placeholder: operation <OP_ID>
-  regex: operation\s+[\w_]+_\w+_\d+
-- name: Pacemaker Node Name
-  placeholder: node <NODE_NAME>
-  regex: node\s+[\w.-]+
 - name: DRBD Resource/Volume/Device
   placeholder: drbd <RESOURCE>/<VOL> <DEVICE>
   regex: drbd\s+[\w_]+/\d+\s+drbd\d+
@@ -107,66 +58,15 @@
 - name: DRBD Role State
   placeholder: role(<STATE> -> <STATE>)
   regex: role\(\s*[\w\s]+->\s*[\w\s]+\s*\)
-- name: DRBD UUID Chain
-  placeholder: <DRBD_UUID_CHAIN>
-  regex: ([0-9a-fA-F]{16}:){3}[0-9a-fA-F]{16}
-- name: DRBD UUID
-  placeholder: <DRBD_UUID>
-  regex: \b[0-9a-fA-F]{16}\b
-- name: DRBD Version
-  placeholder: 'version <NUM> '
-  regex: version\s\d+\s
-- name: DRBD Capacity
-  placeholder: capacity == <NUM>
-  regex: capacity\s*==\s*\d+
-- name: DRBD Size
-  placeholder: size = <SIZE>
-  regex: size\s*=\s*[\d.]+\s*\w+\s*\([\d.]+\s*\w+\)
-- name: DRBD Protocol Version
-  placeholder: agreed network protocol version <VERSION>
-  regex: agreed network protocol version\s+\d+
 - name: DRBD State Change ID
   placeholder: state change <ID>
   regex: state change\s+\d+
-- name: DRBD Thread ID
-  placeholder: t=<TID>
-  regex: t=\d+
-- name: DRBD Call ID
-  placeholder: call=<CALL_ID>
-  regex: call=\d+
-- name: DRBD Resource ID
-  placeholder: drbd <RES_ID>
-  regex: drbd \d+
-- name: DRBD Block ID
-  placeholder: block <BLOCK_ID>
-  regex: block\s+\d+
 - name: DRBD Sector Number
   placeholder: sector <SECTOR_NUM>
   regex: sector\s+\d+
-- name: DRBD Minor Number
-  placeholder: minor <MINOR_NUM>
-  regex: minor\s+\d+
-- name: DRBD Port Number
-  placeholder: port <PORT_NUM>
-  regex: port\s+\d+
-- name: SBD Process PID
-  placeholder: sbd[<PID>]
-  regex: sbd\[\d+\]
-- name: Fence SBD Process PID
-  placeholder: fence_sbd[<PID>]
-  regex: fence_sbd\[\d+\]
-- name: Corosync QDevice Process PID
-  placeholder: corosync-qdevice[<PID>]
-  regex: corosync-qdevice\[\d+\]
 - name: SBD iSCSI Device Path
   placeholder: <SBD_ISCSI_DEVICE_PATH>
   regex: /dev/disk/by-path/ip-[\d.]+:[\d]+-iscsi-[\w.:-]+
-- name: Systemd Service Name
-  placeholder: <SERVICE_NAME>
-  regex: \b\w+\.service\b
-- name: PCI Bus Address
-  placeholder: <PCI_ADDRESS>
-  regex: \b\d{4}:\d{2}:\d{2}\.\d\b
 - name: Kernel SCSI Address
   placeholder: scsi(<HOST>:<CHANNEL>:<TARGET>)
   regex: scsi\(\d+:\d+:\d+\)
@@ -296,22 +196,6 @@
   placeholder: <OOM_EVENT>
   regex: '(Out of memory: Kill process|oom-killer)'
 - ignorecase: true
-  name: Multipathd Process
-  placeholder: 'multipathd:'
-  regex: 'multipathd:'
-- ignorecase: true
-  name: Multipath WWID
-  placeholder: <MPATH_WWID>
-  regex: \b3[0-9a-fA-F]{31}\b
-- ignorecase: true
-  name: Multipath Path Device
-  placeholder: path <PATH_DEV>
-  regex: path\s+\d+:\d+
-- ignorecase: true
-  name: Multipath Map Name
-  placeholder: map <MAP_NAME>
-  regex: map\s+[\w-]+
-- ignorecase: true
   name: EXT4 Filesystem Error
   placeholder: 'EXT4-fs error (device <DEVICE>):'
   regex: 'EXT4-fs error\s+\(device\s+[\w-]+\):'
@@ -361,35 +245,35 @@
   placeholder: 'EXT3-fs: <FILESYSTEM_ERROR>'
   regex: EXT3-fs.*(warning|corrupted|failed|bad superblock|cannot|couldn't|not enough
     memory|unsupported)
-- name: Memory Allocation Error
-  regex: Memory Allocation failed|kmalloc error|out of memory|memory not available
+- ignorecase: true
+  name: Memory Allocation Error
   placeholder: <MEMORY_ALLOC_ERROR>
-  ignorecase: true
-- name: DRBD Split-Brain Auto-Recover
-  regex: 'uuid_compare\(\)=split-brain-auto-recover by rule='
-  placeholder: '<DRBD_SPLIT_BRAIN_AUTO_RECOVER>'
-  ignorecase: true
-- name: DRBD Helper Command Initial Split-Brain
+  regex: Memory Allocation failed|kmalloc error|out of memory|memory not available
+- ignorecase: true
+  name: DRBD Split-Brain Auto-Recover
+  placeholder: <DRBD_SPLIT_BRAIN_AUTO_RECOVER>
+  regex: uuid_compare\(\)=split-brain-auto-recover by rule=
+- ignorecase: true
+  name: DRBD Helper Command Initial Split-Brain
+  placeholder: <DRBD_HELPER_INITIAL_SPLIT_BRAIN>
   regex: 'helper command: /sbin/drbdadm initial-split-brain'
-  placeholder: '<DRBD_HELPER_INITIAL_SPLIT_BRAIN>'
-  ignorecase: true
-- name: DRBD Helper Command Initial Split-Brain Exit Code
+- ignorecase: true
+  name: DRBD Helper Command Initial Split-Brain Exit Code
+  placeholder: <DRBD_HELPER_INITIAL_SPLIT_BRAIN_EXIT>
   regex: 'helper command: /sbin/drbdadm initial-split-brain exit code \d+'
-  placeholder: '<DRBD_HELPER_INITIAL_SPLIT_BRAIN_EXIT>'
-  ignorecase: true
-- name: DRBD Split-Brain Unresolved
-  regex: 'Split-Brain detected but unresolved, dropping connection!'
-  placeholder: '<DRBD_SPLIT_BRAIN_UNRESOLVED>'
-  ignorecase: true
-- name: DRBD Helper Command Split-Brain
+- ignorecase: true
+  name: DRBD Split-Brain Unresolved
+  placeholder: <DRBD_SPLIT_BRAIN_UNRESOLVED>
+  regex: Split-Brain detected but unresolved, dropping connection!
+- ignorecase: true
+  name: DRBD Helper Command Split-Brain
+  placeholder: <DRBD_HELPER_SPLIT_BRAIN>
   regex: 'helper command: /sbin/drbdadm split-brain'
-  placeholder: '<DRBD_HELPER_SPLIT_BRAIN>'
-  ignorecase: true
-- name: DRBD Helper Command Split-Brain Exit Code
+- ignorecase: true
+  name: DRBD Helper Command Split-Brain Exit Code
+  placeholder: <DRBD_HELPER_SPLIT_BRAIN_EXIT>
   regex: 'helper command: /sbin/drbdadm split-brain exit code \d+'
-  placeholder: '<DRBD_HELPER_SPLIT_BRAIN_EXIT>'
-  ignorecase: true
-- name: DRBD Split-Brain Manually Solved
-  regex: 'Split-Brain detected, manually solved. Sync from this node'
-  placeholder: '<DRBD_SPLIT_BRAIN_MANUALLY_SOLVED>'
-  ignorecase: true
+- ignorecase: true
+  name: DRBD Split-Brain Manually Solved
+  placeholder: <DRBD_SPLIT_BRAIN_MANUALLY_SOLVED>
+  regex: Split-Brain detected, manually solved. Sync from this node
