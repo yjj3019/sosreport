@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIBox 규칙 관리</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #0d6efd; --secondary-color: #6c757d; --success-color: #198754;
+            --danger-color: #dc3545; --background-color: #f4f7f9; --surface-color: #ffffff;
+            --text-color: #212529; --header-bg: linear-gradient(135deg, #0d1b2a 0%, #1a2c42 100%);
+            --header-text: #ffffff; --border-color: #e9ecef; --shadow: 0 6px 24px rgba(0,0,0,0.07);
+            --shadow-hover: 0 8px 32px rgba(0,0,0,0.1); --code-bg: #282c34;
+            --input-bg: #fdfdff;
+        }
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: var(--background-color); color: var(--text-color); margin: 0; padding: 2.5rem; }
+        .container { background: var(--surface-color); border-radius: 16px; box-shadow: var(--shadow); width: 100%; max-width: 1200px; margin: auto; overflow: hidden; }
+        .header { background: var(--header-bg); color: var(--header-text); padding: 2.5rem; text-align: center; }
+        .header h1 { margin: 0; font-size: 2.25rem; font-weight: 700; }
+        .content { padding: 2.5rem; }
+        .section-card { border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 2rem; }
+        .section-header { background-color: #f8f9fa; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .section-header h2 { font-size: 1.25rem; margin: 0; color: #1a2c42; }
+        .section-body { padding: 1.5rem; }
+        
+        /* Rule Editor Form */
+        .rule-editor-form { display: grid; grid-template-columns: 150px 1fr; gap: 1rem; align-items: center; }
+        .rule-editor-form label { font-weight: 500; text-align: right; color: #495057; }
+        .rule-editor-form input, .rule-editor-form select, .rule-editor-form textarea {
+            width: 100%; border: 1px solid #ced4da; border-radius: 6px;
+            padding: 0.75rem 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;
+            line-height: 1.6; background-color: var(--input-bg); resize: vertical; box-sizing: border-box;
+        }
+        .rule-editor-form input, .rule-editor-form select { height: 44px; font-family: 'Noto Sans KR', sans-serif; }
+        .rule-editor-form textarea { min-height: 120px; }
+        .rule-editor-form input:focus, .rule-editor-form select:focus, .rule-editor-form textarea:focus {
+            outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+        }
+        .rule-editor-form input[readonly] { background-color: #e9ecef; cursor: not-allowed; }
+
+        /* Rule List Table */
+        .rule-list-table { width: 100%; border-collapse: collapse; }
+        .rule-list-table th, .rule-list-table td { padding: 1rem; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: middle; }
+        .rule-list-table thead th { background-color: #f8f9fa; font-weight: 500; }
+        .rule-list-table tbody tr { cursor: pointer; transition: background-color 0.2s ease; }
+        .rule-list-table tbody tr:hover, .rule-list-table tbody tr.selected { background-color: #e9f5ff; }
+        .rule-list-table .rule-id { font-family: 'JetBrains Mono', monospace; color: var(--primary-color); }
+        .rule-list-table .rule-name { font-weight: 500; }
+
+        .button {
+            background-color: var(--primary-color); color: white; border: none; padding: 0.7rem 1.2rem;
+            border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 500;
+            transition: all 0.3s ease; display: inline-flex; align-items: center; gap: 0.5rem;
+        }
+        .button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .button.secondary { background-color: var(--secondary-color); }
+        .button.success { background-color: var(--success-color); }
+        .button.danger { background-color: var(--danger-color); }
+        .button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(5px); align-items: center; justify-content: center; }
+        .modal-content { background-color: var(--surface-color); padding: 2.5rem; width: 90%; max-width: 450px; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.2); }
+        #main-content { display: none; }
+        .icon { width: 1.2em; height: 1.2em; }
+        .form-actions, .table-actions { display: flex; gap: 0.75rem; }
+    </style>
+</head>
+<body>
+
+    <div id="password-modal" class="modal" style="display: flex;">
+        <div class="modal-content">
+            <h2 style="text-align: center;">비밀번호 인증</h2>
+            <p style="text-align: center; color: #6c757d; margin-bottom: 1.5rem;">규칙 관리를 위해 비밀번호를 입력하세요.</p>
+            <input type="password" id="password-input" placeholder="비밀번호" style="width:100%; padding: 0.8rem 1rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 1rem; box-sizing: border-box; margin-bottom: 1.5rem;">
+            <button id="password-submit" class="button" style="width: 100%;">인증</button>
+            <p id="password-error" style="color:red; display:none; margin-top:1rem; text-align:center;"></p>
+        </div>
+    </div>
+
+    <div id="main-content" class="container">
+        <header class="header">
+            <h1>AIBox Knowledge Base Manager</h1>
+        </header>
+
+        <div class="content">
+            <!-- [사용자 요청] 신규/수정 폼 -->
+            <div class="section-card">
+                <div class="section-header">
+                    <h2 id="editor-title">새 규칙 추가</h2>
+                </div>
+                <div class="section-body">
+                    <div class="rule-editor-form">
+                        <label for="rule-id">ID</label> <input type="text" id="rule-id" readonly placeholder="자동 생성됩니다">
+                        <label for="rule-category">Category</label>
+                        <select id="rule-category">
+                            <!-- 카테고리는 동적으로 채워집니다 -->
+                        </select>
+                        <label for="rule-name">Name</label> <input type="text" id="rule-name" placeholder="규칙 이름">
+                        <label for="rule-severity">Severity</label>
+                        <select id="rule-severity">
+                            <option value="High">High</option>
+                            <option value="Medium" selected>Medium</option>
+                            <option value="Low">Low</option>
+                        </select>
+                        <label for="rule-conditions">Conditions (YAML)</label> <textarea id="rule-conditions" placeholder="- type: log_contains&#10;  log_key: dmesg&#10;  pattern: 'I/O error'"></textarea>
+                        <label for="rule-problem">Problem</label> <textarea id="rule-problem" placeholder="문제점 설명"></textarea>
+                        <label for="rule-solution">Solution</label> <textarea id="rule-solution" placeholder="해결 방안 설명"></textarea>
+                    </div>
+                    <div class="form-actions" style="grid-column: 2; margin-top: 1.5rem;">
+                        <button id="save-rule-btn" class="button success">규칙 저장</button>
+                        <button id="clear-form-btn" class="button secondary">새 규칙 작성</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- [사용자 요청] 규칙 리스트 -->
+            <div class="section-card">
+                <div class="section-header"><h2>규칙 목록</h2></div>
+                <div class="section-body">
+                    <table id="rules-table" class="rule-list-table">
+                        <thead><tr><th>ID</th><th>Name</th><th>Category</th><th style="width: 180px;">Actions</th></tr></thead>
+                        <tbody><!-- 규칙 목록이 여기에 렌더링됩니다. --></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const API_BASE_URL = '/AIBox/api';
+    let serverPassword = null;
+    let allRules = []; // 모든 규칙을 저장하는 플랫 리스트
+
+    // --- DOM Elements ---
+    const passwordModal = document.getElementById('password-modal');
+    const mainContent = document.getElementById('main-content');
+    const passwordInput = document.getElementById('password-input');
+    const passwordSubmitBtn = document.getElementById('password-submit');
+    const passwordError = document.getElementById('password-error');
+    const rulesTableBody = document.querySelector('#rules-table tbody');
+    
+    // Editor Form Elements
+    const editorTitle = document.getElementById('editor-title');
+    const ruleIdInput = document.getElementById('rule-id');
+    const ruleCategorySelect = document.getElementById('rule-category');
+    const ruleNameInput = document.getElementById('rule-name');
+    const ruleSeveritySelect = document.getElementById('rule-severity');
+    const ruleConditionsTextarea = document.getElementById('rule-conditions');
+    const ruleProblemTextarea = document.getElementById('rule-problem');
+    const ruleSolutionTextarea = document.getElementById('rule-solution');
+    const saveRuleBtn = document.getElementById('save-rule-btn');
+    const clearFormBtn = document.getElementById('clear-form-btn');
+
+    // --- Helper for API calls ---
+    async function robustFetch(url, options) {
+        try {
+            const response = await fetch(url, options);
+            const responseText = await response.text();
+            if (!response.ok) throw new Error(responseText || `Server Error (${response.status})`);
+            return responseText ? JSON.parse(responseText) : {};
+        } catch (error) {
+            console.error('Fetch Error:', error);
+            throw new Error(`서버 통신 실패: ${error.message}`);
+        }
+    }
+
+    // --- Authentication ---
+    async function verifyPassword() {
+        const password = passwordInput.value;
+        if (!password) {
+            showError("비밀번호를 입력하세요.");
+            return;
+        }
+        passwordSubmitBtn.disabled = true;
+        passwordSubmitBtn.textContent = '확인 중...';
+        try {
+            const result = await robustFetch(`${API_BASE_URL}/verify-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+            if (result.success) {
+                serverPassword = password;
+                passwordModal.style.display = 'none';
+                mainContent.style.display = 'block';
+                await loadRules();
+            } else {
+                throw new Error("비밀번호가 올바르지 않습니다.");
+            }
+        } catch (error) {
+            showError(error.message);
+        } finally {
+            passwordSubmitBtn.disabled = false;
+            passwordSubmitBtn.textContent = '인증';
+        }
+    }
+
+    function showError(message) {
+        passwordError.textContent = message;
+        passwordError.style.display = 'block';
+    }
+
+    // --- Rule Management ---
+    async function loadRules() {
+        try {
+            const ruleFilesData = await robustFetch(`${API_BASE_URL}/rules`);
+            allRules = [];
+            const categories = new Set();
+
+            ruleFilesData.forEach(fileData => {
+                const category = fileData.filename;
+                categories.add(category);
+                if (Array.isArray(fileData.rules)) {
+                    fileData.rules.forEach(rule => {
+                        allRules.push({ ...rule, category: category });
+                    });
+                }
+            });
+            
+            renderRuleList();
+            populateCategorySelect(categories);
+            clearEditorForm();
+        } catch (error) {
+            alert(`규칙 로딩 실패: ${error.message}`);
+        }
+    }
+
+    function renderRuleList() {
+        rulesTableBody.innerHTML = '';
+        if (allRules.length === 0) {
+            rulesTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 2rem;">등록된 규칙이 없습니다.</td></tr>';
+        } else {
+            allRules.forEach(rule => {
+                const row = document.createElement('tr');
+                row.dataset.id = rule.id;
+                row.innerHTML = `
+                    <td><span class="rule-id">${rule.id}</span></td>
+                    <td><span class="rule-name">${rule.name}</span></td>
+                    <td>${rule.category}</td>
+                    <td class="table-actions">
+                        <button class="button edit-btn">수정</button>
+                        <button class="button danger delete-btn">삭제</button>
+                    </td>
+                `;
+                row.querySelector('.edit-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    populateEditorForm(rule);
+                });
+                row.querySelector('.delete-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleDeleteRule(rule.id);
+                });
+                row.addEventListener('click', () => {
+                    document.querySelectorAll('#rules-table tbody tr').forEach(r => r.classList.remove('selected'));
+                    row.classList.add('selected');
+                    populateEditorForm(rule);
+                });
+                rulesTableBody.appendChild(row);
+            });
+        }
+    }
+
+    function populateCategorySelect(categories) {
+        ruleCategorySelect.innerHTML = '';
+        categories.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            ruleCategorySelect.appendChild(option);
+        });
+    }
+
+    function populateEditorForm(rule) {
+        editorTitle.textContent = `규칙 수정: ${rule.id}`;
+        ruleIdInput.value = rule.id;
+        ruleCategorySelect.value = rule.category;
+        ruleNameInput.value = rule.name;
+        ruleSeveritySelect.value = rule.severity;
+        ruleConditionsTextarea.value = jsyaml.dump(rule.conditions || []);
+        ruleProblemTextarea.value = rule.recommendation?.problem || '';
+        ruleSolutionTextarea.value = rule.recommendation?.solution || '';
+    }
+
+    function clearEditorForm() {
+        editorTitle.textContent = '새 규칙 추가';
+        ruleIdInput.value = '';
+        ruleNameInput.value = '';
+        ruleSeveritySelect.value = 'Medium';
+        ruleConditionsTextarea.value = '';
+        ruleProblemTextarea.value = '';
+        ruleSolutionTextarea.value = '';
+        document.querySelectorAll('#rules-table tbody tr').forEach(r => r.classList.remove('selected'));
+    }
+
+    function handleDeleteRule(ruleId) {
+        if (!confirm(`규칙 '${ruleId}'를 정말 삭제하시겠습니까?`)) return;
+        allRules = allRules.filter(rule => rule.id !== ruleId);
+        saveAllRules();
+    }
+
+    async function handleSaveRule() {
+        const id = ruleIdInput.value;
+        const category = ruleCategorySelect.value;
+        const name = ruleNameInput.value.trim();
+
+        if (!name || !category) {
+            alert('규칙 이름과 카테고리는 필수입니다.');
+            return;
+        }
+
+        let conditions; // [사용자 요청] YAML 문법 검사 로직 강화
+        try {
+            const conditionsText = ruleConditionsTextarea.value.trim();
+            // 비어 있는 경우, 빈 배열로 처리
+            if (conditionsText === '') {
+                conditions = [];
+            } else {
+                conditions = jsyaml.load(conditionsText);
+            }
+
+            // YAML의 최상위 요소가 배열(리스트)인지 확인
+            if (!Array.isArray(conditions)) {
+                throw new Error("YAML 내용은 반드시 리스트(배열) 형식이어야 합니다. 각 항목은 '-'로 시작해야 합니다.");
+            }
+            ruleConditionsTextarea.style.borderColor = '#ced4da';
+        } catch (e) {
+            // YAML 파싱 오류 발생 시 사용자에게 상세 내용 알림
+            alert(`Conditions 필드의 YAML 문법이 잘못되었습니다.\n\n오류: ${e.message}`);
+            ruleConditionsTextarea.style.borderColor = 'red';
+            return;
+        }
+
+        const newRule = {
+            id: id || `${category.split('.')[0].toUpperCase()}-${Date.now()}`,
+            category: category,
+            name: name,
+            severity: ruleSeveritySelect.value,
+            conditions: conditions,
+            recommendation: {
+                problem: ruleProblemTextarea.value.trim(),
+                solution: ruleSolutionTextarea.value.trim()
+            }
+        };
+
+        if (id) { // 수정
+            const index = allRules.findIndex(r => r.id === id);
+            if (index > -1) allRules[index] = newRule;
+        } else { // 신규
+            allRules.push(newRule);
+        }
+
+        await saveAllRules();
+    }
+
+    async function saveAllRules() {
+        const ruleFilesData = [];
+        const groupedRules = {};
+
+        allRules.forEach(rule => {
+            if (!groupedRules[rule.category]) {
+                groupedRules[rule.category] = [];
+            }
+            const { category, ...ruleToSave } = rule;
+            groupedRules[rule.category].push(ruleToSave);
+        });
+
+        for (const filename in groupedRules) {
+            ruleFilesData.push({ filename: filename, rules: groupedRules[filename] });
+        }
+
+        const originalButtonText = saveRuleBtn.textContent;
+        saveRuleBtn.disabled = true;
+        saveRuleBtn.textContent = '저장 중...';
+
+        try {
+            await robustFetch(`${API_BASE_URL}/rules`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: serverPassword, data: ruleFilesData })
+            });
+            await loadRules();
+        } catch (error) {
+            alert(`저장 실패: ${error.message}`);
+        } finally {
+            saveRuleBtn.disabled = false;
+            saveRuleBtn.textContent = originalButtonText;
+        }
+    }
+
+    // --- Event Listeners ---
+    passwordSubmitBtn.addEventListener('click', verifyPassword);
+    passwordInput.addEventListener('keypress', (event) => {
+        if (event.key === 'Enter') verifyPassword();
+    });
+    saveRuleBtn.addEventListener('click', handleSaveRule);
+    clearFormBtn.addEventListener('click', clearEditorForm);
+});
+</script>
+
+</body>
+</html>
