@@ -175,6 +175,15 @@
   name: Netfilter Connection Tracking Table Full
   placeholder: 'nf_conntrack: table full, dropping packet'
   regex: 'nf_conntrack: table full, dropping packet'
+# ==========================================
+# [사용자 요청] 제외할 노이즈 패턴 정의 (ignore: true)
+# ==========================================
+- ignorecase: true
+  name: Ignore Systemd User Manager Stop
+  regex: 'systemd\[\d+\]: Stopping User (Runtime Directory|Manager for UID)'
+  placeholder: ''
+  ignore: true
+# ==========================================
 - ignorecase: true
   name: Critical Error
   placeholder: <CRITICAL>
